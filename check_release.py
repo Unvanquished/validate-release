@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import hashlib
 import re
 import sys
 import zipfile
@@ -72,6 +73,46 @@ def Symbols(z):
     for missing in expected:
         yield 'No symbols found for ' + str(missing)
 
+def CheckMd5sums(z, base, dpks):
+    try:
+        sums = z.open(base + 'md5sums')
+    except KeyError:
+        yield 'Missing md5sums file in pkg/'
+        return
+    dpks = set(dpks)
+    for line in sums:
+        md5, _, name = line.strip().decode('ascii').partition(' *')
+        if not name:
+            yield 'Bad line in md5sums: ' + repr(line)
+            continue
+        if name not in dpks:
+            yield 'md5sums has file %r which does not exist in pkg/' % name
+            continue
+        dpks.remove(name)
+        content = z.open(base + name).read()
+        actual = hashlib.md5(content).digest().hex()
+        if md5 != actual:
+            yield 'md5sums says hash of %s is %s, but actual is %s' % (name, md5, actual)
+    for unmatched in dpks:
+        yield 'Missing md5sums entry for file: ' + unmatched
+
+def CheckPkg(z, base):
+    base += 'pkg/'
+    dpks = []
+    for name in z.namelist():
+        if not name.startswith(base) or name == base:
+            continue
+        name = name[len(base):]
+        if re.fullmatch(r'[^/]+\.dpk', name):
+            dpks.append(name)
+        elif name != 'md5sums':
+            yield 'Unexpected filename in pkg/ ' + repr(name)
+    unvanquished = base.split('/')[0] + '.dpk'
+    if unvanquished not in dpks:
+        yield 'Expected there to be a package named ' + unvanquished
+    yield from CheckMd5sums(z, base, dpks)
+    # TODO: Check DEPS files inside dpks?
+
 def CheckRelease(filename, number):
     z = zipfile.ZipFile(filename)
     base = 'unvanquished_' + number + '/'
@@ -89,6 +130,7 @@ def CheckRelease(filename, number):
             yield 'Missing file: ' + name
         else:
             yield from checker(zipfile.ZipFile(z.open(info)))
+    yield from CheckPkg(z, base)
 
 
 if __name__ == '__main__':
