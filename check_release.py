@@ -1,12 +1,37 @@
 #!/usr/bin/python3
 
+import contextlib
 import hashlib
 import re
+import subprocess
 import sys
+import tempfile
 import zipfile
 
+@contextlib.contextmanager
+def TempUnzip(z, filename):
+    try:
+        tempdir = tempfile.TemporaryDirectory()
+        yield z.extract(filename, path=tempdir.name)
+    finally:
+        tempdir.cleanup()
+
+def LinuxCheckPie(z, binary):
+    # Algorithm based on https://github.com/slimm609/checksec.sh
+    with TempUnzip(z, binary) as bin:
+        output = subprocess.check_output(['readelf', '-h', bin])
+        type = re.search(rb'Type:\s*(\w+)', output).group(1)
+        if type != b'DYN':
+            yield f"Linux binary '{binary}' appears not to be PIE"
+        else:
+            output = subprocess.check_output(['readelf', '-d', bin])
+            if b'(DEBUG)' not in output:
+                yield f"Confused about whether Linux binary '{binary}' is PIE"
+
 def Linux(z):
-    yield from ()
+    yield from LinuxCheckPie(z, 'daemon')
+    yield from LinuxCheckPie(z, 'daemonded')
+    yield from LinuxCheckPie(z, 'daemon-tty')
 def Mac(z):
     yield from ()
 def Windows32(z):
