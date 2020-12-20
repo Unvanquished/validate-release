@@ -1,6 +1,6 @@
 Script that checks an Unvanquished release for various possible mistakes.
 
-Dependencies (pip): `pefile`
+Optional dependency (pip): `pefile`
 
 Usage:
 

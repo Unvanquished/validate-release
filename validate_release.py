@@ -8,7 +8,12 @@ import sys
 import tempfile
 import zipfile
 
-import pefile
+try:
+    import pefile
+except ImportError:
+    pefile = None
+
+READELF = 'readelf'
 
 @contextlib.contextmanager
 def TempUnzip(z, filename):
@@ -20,8 +25,10 @@ def TempUnzip(z, filename):
 
 def LinuxCheckAslr(z, binary):
     # Algorithm based on https://github.com/slimm609/checksec.sh
+    if not READELF:
+        return
     with TempUnzip(z, binary) as bin:
-        output = subprocess.check_output(['readelf', '-h', bin])
+        output = subprocess.check_output([READELF, '-h', bin])
         type = re.search(rb'Type:\s*(\w+)', output).group(1)
         if type != b'DYN':
             yield f"Linux binary '{binary}' appears not to be PIE"
@@ -32,6 +39,8 @@ def LinuxCheckAslr(z, binary):
 
 def WindowsCheckAslr(z, binary, bitness):
     # Partially based on https://gist.github.com/wdormann/dcdba9840701c879115f9aa5c1ef86dc
+    if not pefile:
+        return
     with z.open(binary) as f:
         bin = f.read()
     pe = pefile.PE(data=bin)
@@ -162,7 +171,18 @@ def CheckPkg(z, base):
     yield from CheckMd5sums(z, base, dpks)
     # TODO: Check DEPS files inside dpks?
 
+def CheckDependencies():
+    if not pefile:
+        yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
+    global READELF
+    try:
+        subprocess.check_call([READELF, '--help'], stdout=subprocess.DEVNULL)
+    except OSError:
+        READELF = None
+        yield "'readelf' command not found. Unable to analyze Linux binaries without it."
+
 def CheckRelease(filename, number):
+    yield from CheckDependencies()
     z = zipfile.ZipFile(filename)
     base = 'unvanquished_' + number + '/'
     for name, checker in (
