@@ -4,7 +4,7 @@ Dependencies (pip): `pefile`
 
 Usage:
 
-    check_release.py <release zip file> <version number>
+    validate_release.py <release zip file> <version number>
 
 The script has been tested on Linux and Windows. `readelf` even works on Windows if you have MinGW installed: for some reason, they ship a readelf which works on (only) Linux binaries.
 
@@ -15,7 +15,7 @@ Checks performed:
 
 Running the script on the 0.51 release produces the following output:
 
-    # python3 check_release.py unvanquished_0.51.1.zip 0.51.1
+    # python3 validate_release.py unvanquished_0.51.1.zip 0.51.1
     Linux binary 'daemon' appears not to be PIE
     Linux binary 'daemonded' appears not to be PIE
     Linux binary 'daemon-tty' appears not to be PIE

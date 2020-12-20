@@ -184,6 +184,6 @@ def CheckRelease(filename, number):
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
-        sys.exit('Sample usage: check_release.py some/path/unvanquished_1.2.3.zip 1.2.3')
+        sys.exit('Sample usage: validate_release.py some/path/unvanquished_1.2.3.zip 1.2.3')
     for error in CheckRelease(*sys.argv[1:]):
         print(error)
