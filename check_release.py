@@ -8,6 +8,8 @@ import sys
 import tempfile
 import zipfile
 
+import pefile
+
 @contextlib.contextmanager
 def TempUnzip(z, filename):
     try:
@@ -16,7 +18,7 @@ def TempUnzip(z, filename):
     finally:
         tempdir.cleanup()
 
-def LinuxCheckPie(z, binary):
+def LinuxCheckAslr(z, binary):
     # Algorithm based on https://github.com/slimm609/checksec.sh
     with TempUnzip(z, binary) as bin:
         output = subprocess.check_output(['readelf', '-h', bin])
@@ -28,16 +30,38 @@ def LinuxCheckPie(z, binary):
             if b'(DEBUG)' not in output:
                 yield f"Confused about whether Linux binary '{binary}' is PIE"
 
+def WindowsCheckAslr(z, binary, bitness):
+    # Partially based on https://gist.github.com/wdormann/dcdba9840701c879115f9aa5c1ef86dc
+    with z.open(binary) as f:
+        bin = f.read()
+    pe = pefile.PE(data=bin)
+    assert (bitness == 32) == pe.FILE_HEADER.IMAGE_FILE_32BIT_MACHINE
+    if not pe.OPTIONAL_HEADER.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE:
+        yield f"{bitness}-bit Windows binary '{binary}' does not have ASLR (DYNAMICBASE)"
+    elif pe.FILE_HEADER.IMAGE_FILE_RELOCS_STRIPPED:
+        # https://nvd.nist.gov/vuln/detail/CVE-2018-5392
+        yield f"{bitness}-bit Windows binary '{binary}' has broken ASLR due to stripped relocs"
+    elif bitness == 64 and not pe.OPTIONAL_HEADER.IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA:
+        yield f"64-bit Windows binary '{binary}' lacks High-Entropy VA flag"
+
 def Linux(z):
-    yield from LinuxCheckPie(z, 'daemon')
-    yield from LinuxCheckPie(z, 'daemonded')
-    yield from LinuxCheckPie(z, 'daemon-tty')
+    yield from LinuxCheckAslr(z, 'daemon')
+    yield from LinuxCheckAslr(z, 'daemonded')
+    yield from LinuxCheckAslr(z, 'daemon-tty')
+
 def Mac(z):
     yield from ()
+
 def Windows32(z):
-    yield from ()
+    yield from WindowsCheckAslr(z, 'daemon.exe', 32)
+    yield from WindowsCheckAslr(z, 'daemonded.exe', 32)
+    yield from WindowsCheckAslr(z, 'daemon-tty.exe', 32)
+
 def Windows64(z):
-    yield from ()
+    yield from WindowsCheckAslr(z, 'daemon.exe', 64)
+    yield from WindowsCheckAslr(z, 'daemonded.exe', 64)
+    yield from WindowsCheckAslr(z, 'daemon-tty.exe', 64)
+
 def Symbols(z):
     expected = {
         ('Linux', 'x86_64', 'daemon'),
