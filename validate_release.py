@@ -12,6 +12,10 @@ try:
     import pefile
 except ImportError:
     pefile = None
+try:
+    from macholib import MachO
+except:
+    MachO = None
 
 READELF = 'readelf'
 
@@ -53,13 +57,25 @@ def WindowsCheckAslr(z, binary, bitness):
     elif bitness == 64 and not pe.OPTIONAL_HEADER.IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA:
         yield f"64-bit Windows binary '{binary}' lacks High-Entropy VA flag"
 
+def MacCheckAslr(z, binary):
+    if not MachO:
+        return
+    with TempUnzip(z, 'Unvanquished.app/Contents/MacOS/' + binary) as path:
+        macho = MachO.MachO(path)
+        header, = macho.headers
+        MH_PIE = 0x200000
+        if not header.header.flags & MH_PIE:
+            yield f"Mac binary '{binary}' is not PIE"
+
 def Linux(z):
     yield from LinuxCheckAslr(z, 'daemon')
     yield from LinuxCheckAslr(z, 'daemonded')
     yield from LinuxCheckAslr(z, 'daemon-tty')
 
 def Mac(z):
-    yield from ()
+    yield from MacCheckAslr(z, 'daemon')
+    yield from MacCheckAslr(z, 'daemonded')
+    yield from MacCheckAslr(z, 'daemon-tty')
 
 def Windows32(z):
     yield from WindowsCheckAslr(z, 'daemon.exe', 32)
@@ -174,6 +190,8 @@ def CheckPkg(z, base):
 def CheckDependencies():
     if not pefile:
         yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
+    if not MachO:
+        yield 'Missing pip package: macholib. Unable to analyze Mac binaries without it.'
     global READELF
     try:
         subprocess.check_call([READELF, '--help'], stdout=subprocess.DEVNULL)

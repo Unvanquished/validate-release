@@ -1,0 +1,2 @@
+macholib
+pefile

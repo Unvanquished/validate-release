@@ -1,6 +1,6 @@
 Script that checks an Unvanquished release for various possible mistakes.
 
-Optional dependency (pip): `pefile`
+Optional dependencies (pip): `macholib`, `pefile`
 
 Usage:
 
@@ -9,7 +9,7 @@ Usage:
 The script has been tested on Linux and Windows. `readelf` even works on Windows if you have MinGW installed: for some reason, they ship a readelf which works on (only) Linux binaries.
 
 Checks performed:
-- Linux and Windows binaries are built with ASLR
+- All native binaries are built with ASLR
 - All Breakpad symbol files exist and have some of the expected content
 - Hashes in `pkg/md5sums` match the packages
 
@@ -19,6 +19,9 @@ Running the script on the 0.51 release produces the following output:
     Linux binary 'daemon' appears not to be PIE
     Linux binary 'daemonded' appears not to be PIE
     Linux binary 'daemon-tty' appears not to be PIE
+    Mac binary 'daemon' is not PIE
+    Mac binary 'daemonded' is not PIE
+    Mac binary 'daemon-tty' is not PIE
     32-bit Windows binary 'daemonded.exe' has broken ASLR due to stripped relocs
     32-bit Windows binary 'daemon-tty.exe' has broken ASLR due to stripped relocs
     64-bit Windows binary 'daemon.exe' lacks High-Entropy VA flag
