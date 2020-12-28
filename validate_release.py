@@ -13,7 +13,7 @@ try:
 except ImportError:
     pefile = None
 try:
-    from macholib import MachO
+    from macholib import MachO, mach_o
 except:
     MachO = None
 
@@ -57,15 +57,25 @@ def WindowsCheckAslr(z, binary, bitness):
     elif bitness == 64 and not pe.OPTIONAL_HEADER.IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA:
         yield f"64-bit Windows binary '{binary}' lacks High-Entropy VA flag"
 
-def MacCheckAslr(z, binary):
+def MacCheckBinary(z, binary):
     if not MachO:
         return
     with TempUnzip(z, 'Unvanquished.app/Contents/MacOS/' + binary) as path:
         macho = MachO.MachO(path)
         header, = macho.headers
+
+        # Check PIE
         MH_PIE = 0x200000
         if not header.header.flags & MH_PIE:
             yield f"Mac binary '{binary}' is not PIE"
+
+        # Check rpath
+        rpaths = {command[2].rstrip(b'\0').rstrip(b'/')
+                  for command in header.commands
+                  if isinstance(command[1], mach_o.rpath_command)}
+        rpaths.discard(b'@executable_path')
+        if rpaths:
+            yield f"Mac binary '{binary}' has unwanted rpaths {rpaths}"
 
 def Linux(z):
     yield from LinuxCheckAslr(z, 'daemon')
@@ -73,9 +83,9 @@ def Linux(z):
     yield from LinuxCheckAslr(z, 'daemon-tty')
 
 def Mac(z):
-    yield from MacCheckAslr(z, 'daemon')
-    yield from MacCheckAslr(z, 'daemonded')
-    yield from MacCheckAslr(z, 'daemon-tty')
+    yield from MacCheckBinary(z, 'daemon')
+    yield from MacCheckBinary(z, 'daemonded')
+    yield from MacCheckBinary(z, 'daemon-tty')
 
 def Windows32(z):
     yield from WindowsCheckAslr(z, 'daemon.exe', 32)

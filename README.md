@@ -20,8 +20,11 @@ Running the script on the 0.51 release produces the following output:
     Linux binary 'daemonded' appears not to be PIE
     Linux binary 'daemon-tty' appears not to be PIE
     Mac binary 'daemon' is not PIE
+    Mac binary 'daemon' has unwanted rpaths {b'/Users/harshmodi/code/Unvanquished/daemon/external_deps/macosx64-4/lib', b'/Users/harshmodi/code/Unvanquished/daemon/external_deps/macosx64-4'}
     Mac binary 'daemonded' is not PIE
+    Mac binary 'daemonded' has unwanted rpaths {b'/Users/harshmodi/code/Unvanquished/daemon/external_deps/macosx64-4/lib', b'/Users/harshmodi/code/Unvanquished/daemon/external_deps/macosx64-4'}
     Mac binary 'daemon-tty' is not PIE
+    Mac binary 'daemon-tty' has unwanted rpaths {b'/Users/harshmodi/code/Unvanquished/daemon/external_deps/macosx64-4/lib', b'/Users/harshmodi/code/Unvanquished/daemon/external_deps/macosx64-4'}
     32-bit Windows binary 'daemonded.exe' has broken ASLR due to stripped relocs
     32-bit Windows binary 'daemon-tty.exe' has broken ASLR due to stripped relocs
     64-bit Windows binary 'daemon.exe' lacks High-Entropy VA flag
