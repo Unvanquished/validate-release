@@ -22,6 +22,8 @@ for testcase in ('passing-example_1.2', 'lacking-aslr_1.2'):
             for dirpath, _, filenames in os.walk(walk):
                 for filename in filenames:
                     filename = os.path.join(dirpath, filename)
-                    subzip.write(filename, arcname=os.path.relpath(filename, walk))
+                    info = zipfile.ZipInfo.from_file(filename, arcname=os.path.relpath(filename, walk))
+                    info.external_attr=int('100755', 8) << 16
+                    subzip.writestr(info, open(filename, 'rb').read())
         stream.seek(0)
         z.writestr('unvanquished_1.2/' + subdir + '.zip', stream.read())

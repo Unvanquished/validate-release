@@ -27,6 +27,14 @@ def TempUnzip(z, filename):
     finally:
         tempdir.cleanup()
 
+# https://unix.stackexchange.com/a/14727
+def CheckUnixPermissions(z):
+    normal = int('644', 8), int('755', 8)
+    for info in z.infolist():
+        permissions = (info.external_attr >> 16) & 0xFFF
+        if permissions not in normal:
+            yield f"File '{info.filename}' in {z.filename} has odd permissions {oct(permissions)}"
+
 def LinuxCheckAslr(z, binary):
     # Algorithm based on https://github.com/slimm609/checksec.sh
     if not READELF:
@@ -78,11 +86,13 @@ def MacCheckBinary(z, binary):
             yield f"Mac binary '{binary}' has unwanted rpaths {rpaths}"
 
 def Linux(z):
+    yield from CheckUnixPermissions(z)
     yield from LinuxCheckAslr(z, 'daemon')
     yield from LinuxCheckAslr(z, 'daemonded')
     yield from LinuxCheckAslr(z, 'daemon-tty')
 
 def Mac(z):
+    yield from CheckUnixPermissions(z)
     yield from MacCheckBinary(z, 'daemon')
     yield from MacCheckBinary(z, 'daemonded')
     yield from MacCheckBinary(z, 'daemon-tty')
