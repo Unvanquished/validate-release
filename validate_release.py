@@ -14,7 +14,7 @@ except ImportError:
     pefile = None
 try:
     from macholib import MachO, mach_o
-except:
+except ImportError:
     MachO = None
 
 READELF = 'readelf'
