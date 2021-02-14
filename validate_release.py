@@ -2,6 +2,7 @@
 
 import contextlib
 import hashlib
+import os
 import re
 import subprocess
 import sys
@@ -211,18 +212,19 @@ def CheckDependencies():
     if not ELFFile:
         yield 'Missing pip package: pyelftools. Unable to analyze Linux binaries without it.'
 
+OS_CHECKERS = (
+    ('linux-amd64', Linux),
+    ('macos-amd64', Mac),
+    ('windows-i686', Windows32),
+    ('windows-amd64', Windows64),
+)
+
 def CheckRelease(filename, number):
     yield from CheckDependencies()
     z = zipfile.ZipFile(filename)
     yield from CheckUnixPermissions(z)
     base = 'unvanquished_' + number + '/'
-    for name, checker in (
-        ('linux-amd64', Linux),
-        ('macos-amd64', Mac),
-        ('windows-i686', Windows32),
-        ('windows-amd64', Windows64),
-        ('symbols_' + number, Symbols),
-    ):
+    for name, checker in OS_CHECKERS + (('symbols_' + number, Symbols),):
         name = base + name + '.zip'
         try:
             info = z.getinfo(name)
@@ -233,8 +235,44 @@ def CheckRelease(filename, number):
     yield from CheckPkg(z, base)
 
 
+def UsageError():
+    sys.exit('Usage: validate_release.py <path to universal zip> [<version number>]\n'
+             '       validate_release.py <path to symbols zip> [symbols]\n'
+             '       validate_release.py <path to OS-specific zip> [linux-amd64 | macos-amd64 | windows-i686 | windows-amd64]')
+
+def GuessArg2(filename):
+    """Try to guess the desired action from the zip file name."""
+    filename = os.path.basename(filename)
+    if not filename.endswith('.zip'):
+        return None
+    name = filename[:-4]
+    if name in dict(OS_CHECKERS):
+        return name
+    if re.match(r'^unvanquished_[0-9.]+$', name):
+        return name.split('_')[1]
+    if re.match(r'symbols_[0-9.]+$', name):
+        return 'symbols'
+    return None
+
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        sys.exit('Sample usage: validate_release.py some/path/unvanquished_1.2.3.zip 1.2.3')
-    for error in CheckRelease(*sys.argv[1:]):
+    if len(sys.argv) == 2:
+        arg2 = GuessArg2(sys.argv[1])
+        if arg2 is None:
+            print('Could not guess desired action from filename.', file=sys.stderr)
+            UsageError()
+    elif len(sys.argv) == 3:
+        arg2 = sys.argv[2]
+    else:
+        UsageError()
+    checker = dict(OS_CHECKERS).get(arg2)
+    if checker:
+        print('Checking the zip for platform %s' % arg2, file=sys.stderr)
+        generator = checker(zipfile.ZipFile(sys.argv[1]))
+    elif arg2 == 'symbols':
+        print('Checking the symbols zip', file=sys.stderr)
+        generator = Symbols(zipfile.ZipFile(sys.argv[1]))
+    else:
+        print('Checking the universal zip (version = %r)' % arg2, file=sys.stderr)
+        generator = CheckRelease(sys.argv[1], arg2)
+    for error in generator:
         print(error)
