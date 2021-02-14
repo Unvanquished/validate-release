@@ -214,6 +214,7 @@ def CheckDependencies():
 def CheckRelease(filename, number):
     yield from CheckDependencies()
     z = zipfile.ZipFile(filename)
+    yield from CheckUnixPermissions(z)
     base = 'unvanquished_' + number + '/'
     for name, checker in (
         ('linux-amd64', Linux),
