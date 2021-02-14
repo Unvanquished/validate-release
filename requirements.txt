@@ -1,2 +1,3 @@
 macholib
 pefile
+pyelftools

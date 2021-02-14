@@ -16,8 +16,11 @@ try:
     from macholib import MachO, mach_o
 except ImportError:
     MachO = None
+try:
+    from elftools.elf.elffile import ELFFile
+except ImportError:
+    ELFFile = None
 
-READELF = 'readelf'
 
 @contextlib.contextmanager
 def TempUnzip(z, filename):
@@ -36,18 +39,11 @@ def CheckUnixPermissions(z):
             yield f"File '{info.filename}' in {z.filename} has odd permissions {oct(permissions)}"
 
 def LinuxCheckAslr(z, binary):
-    # Algorithm based on https://github.com/slimm609/checksec.sh
-    if not READELF:
+    if not ELFFile:
         return
-    with TempUnzip(z, binary) as bin:
-        output = subprocess.check_output([READELF, '-h', bin])
-        type = re.search(rb'Type:\s*(\w+)', output).group(1)
-        if type != b'DYN':
-            yield f"Linux binary '{binary}' appears not to be PIE"
-        else:
-            output = subprocess.check_output(['readelf', '-d', bin])
-            if b'(DEBUG)' not in output:
-                yield f"Confused about whether Linux binary '{binary}' is PIE"
+    elf = ELFFile(z.open(binary))
+    if elf.header.e_type != 'ET_DYN':
+        yield f"Linux binary '{binary}' is not PIE (type is {elf.header.e_type})"
 
 def WindowsCheckAslr(z, binary, bitness):
     # Partially based on https://gist.github.com/wdormann/dcdba9840701c879115f9aa5c1ef86dc
@@ -212,12 +208,8 @@ def CheckDependencies():
         yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
     if not MachO:
         yield 'Missing pip package: macholib. Unable to analyze Mac binaries without it.'
-    global READELF
-    try:
-        subprocess.check_call([READELF, '--help'], stdout=subprocess.DEVNULL)
-    except OSError:
-        READELF = None
-        yield "'readelf' command not found. Unable to analyze Linux binaries without it."
+    if not ELFFile:
+        yield 'Missing pip package: pyelftools. Unable to analyze Linux binaries without it.'
 
 def CheckRelease(filename, number):
     yield from CheckDependencies()

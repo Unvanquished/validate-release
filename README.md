@@ -1,12 +1,12 @@
 Script that checks an Unvanquished release for various possible mistakes.
 
-Optional dependencies (pip): `macholib`, `pefile`
+Optional dependencies (pip): `macholib`, `pefile`, `pyelftools`
 
 Usage:
 
     validate_release.py <release zip file> <version number>
 
-The script has been tested on Linux and Windows. `readelf` even works on Windows if you have MinGW installed: for some reason, they ship a readelf which works on (only) Linux binaries.
+The script has been tested on Linux and Windows. Pure Python libraries are used to analyze the various binary formats, so it should work on any platform.
 
 Checks performed:
 - All native binaries are built with ASLR
@@ -20,9 +20,9 @@ Running the script on the 0.51.1 release produces the following output:
     File 'nacl_loader' in unvanquished_0.51.1/linux-amd64.zip has odd permissions 0o700
     File 'irt_core-x86_64.nexe' in unvanquished_0.51.1/linux-amd64.zip has odd permissions 0o600
     File 'nacl_helper_bootstrap' in unvanquished_0.51.1/linux-amd64.zip has odd permissions 0o700
-    Linux binary 'daemon' appears not to be PIE
-    Linux binary 'daemonded' appears not to be PIE
-    Linux binary 'daemon-tty' appears not to be PIE
+    Linux binary 'daemon' is not PIE (type is ET_EXEC)
+    Linux binary 'daemonded' is not PIE (type is ET_EXEC)
+    Linux binary 'daemon-tty' is not PIE (type is ET_EXEC)
     Mac binary 'daemon' is not PIE
     Mac binary 'daemon' has unwanted rpaths {b'/Users/harshmodi/code/Unvanquished/daemon/external_deps/macosx64-4/lib', b'/Users/harshmodi/code/Unvanquished/daemon/external_deps/macosx64-4'}
     Mac binary 'daemonded' is not PIE
