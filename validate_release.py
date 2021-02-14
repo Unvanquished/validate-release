@@ -32,9 +32,9 @@ def TempUnzip(z, filename):
 
 # https://unix.stackexchange.com/a/14727
 def CheckUnixPermissions(z):
-    normal = int('644', 8), int('755', 8)
+    normal = 0o644, 0o755
     for info in z.infolist():
-        permissions = (info.external_attr >> 16) & 0xFFF
+        permissions = (info.external_attr >> 16) & 0o7777
         if permissions not in normal:
             yield f"File '{info.filename}' in {z.filename} has odd permissions {oct(permissions)}"
 
