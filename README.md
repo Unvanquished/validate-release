@@ -14,7 +14,7 @@ Checks performed:
 - Hashes in `pkg/md5sums` match the packages
 - Normal file permissions for Unices (ones like on the NaCl files in 0.51.1 could prevent making an installation usable by someone other than the owner)
 
-Running the script on the 0.51 release produces the following output:
+Running the script on the 0.51.1 release produces the following output:
 
     # python3 validate_release.py unvanquished_0.51.1.zip 0.51.1
     File 'nacl_loader' in unvanquished_0.51.1/linux-amd64.zip has odd permissions 0o700
