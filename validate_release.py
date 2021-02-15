@@ -19,6 +19,7 @@ except ImportError:
     MachO = None
 try:
     from elftools.elf.elffile import ELFFile
+    from elftools.elf.dynamic import DynamicSection
 except ImportError:
     ELFFile = None
 
@@ -39,12 +40,39 @@ def CheckUnixPermissions(z):
         if permissions not in normal:
             yield f"File '{info.filename}' in {z.filename} has odd permissions {oct(permissions)}"
 
-def LinuxCheckAslr(z, binary):
+def LinuxCheckBinary(z, binary):
     if not ELFFile:
         return
     elf = ELFFile(z.open(binary))
+
+    # Check ASLR
     if elf.header.e_type != 'ET_DYN':
         yield f"Linux binary '{binary}' is not PIE (type is {elf.header.e_type})"
+
+    # Check dynamic dependency changes (from 0.51.1 baseline)
+    deps = set()
+    for section in elf.iter_sections():
+        if not isinstance(section, DynamicSection):
+            continue
+        for tag in section.iter_tags():
+            if tag.entry.d_tag == 'DT_NEEDED':
+                deps.add(tag.needed)
+    expected = {
+        'libc.so.6',
+        'libdl.so.2',
+        'libgcc_s.so.1',
+        'libm.so.6',
+        'libpthread.so.0',
+        'librt.so.1',
+        'libstdc++.so.6',
+    }
+    if binary == 'daemon':
+        expected.add('libGL.so.1')
+    added = deps - expected
+    removed = expected - deps
+    if added or removed:
+        changes = ['+' + x for x in added] + ['-' + x for x in removed]
+        yield f"{binary} dynamic dependencies changed: " + ', '.join(changes)
 
 def WindowsCheckAslr(z, binary, bitness):
     # Partially based on https://gist.github.com/wdormann/dcdba9840701c879115f9aa5c1ef86dc
@@ -84,9 +112,9 @@ def MacCheckBinary(z, binary):
 
 def Linux(z):
     yield from CheckUnixPermissions(z)
-    yield from LinuxCheckAslr(z, 'daemon')
-    yield from LinuxCheckAslr(z, 'daemonded')
-    yield from LinuxCheckAslr(z, 'daemon-tty')
+    yield from LinuxCheckBinary(z, 'daemon')
+    yield from LinuxCheckBinary(z, 'daemonded')
+    yield from LinuxCheckBinary(z, 'daemon-tty')
 
 def Mac(z):
     yield from CheckUnixPermissions(z)

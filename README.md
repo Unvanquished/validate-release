@@ -15,6 +15,7 @@ Checks performed:
 - All Breakpad symbol files exist and have some of the expected content
 - Hashes in `pkg/md5sums` match the packages
 - Normal file permissions for Unices (ones like on the NaCl files in 0.51.1 could prevent making an installation usable by someone other than the owner)
+- Linux binaries have no unexpected changes in dynamic dependencies
 
 Running the script on the 0.51.1 release produces the following output:
 
