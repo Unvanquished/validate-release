@@ -111,23 +111,31 @@ def MacCheckBinary(z, binary):
             yield f"Mac binary '{binary}' has unwanted rpaths {rpaths}"
 
 def Linux(z):
+    if not ELFFile:
+        yield 'Missing pip package: pyelftools. Unable to analyze Linux binaries without it.'
     yield from CheckUnixPermissions(z)
     yield from LinuxCheckBinary(z, 'daemon')
     yield from LinuxCheckBinary(z, 'daemonded')
     yield from LinuxCheckBinary(z, 'daemon-tty')
 
 def Mac(z):
+    if not MachO:
+        yield 'Missing pip package: macholib. Unable to analyze Mac binaries without it.'
     yield from CheckUnixPermissions(z)
     yield from MacCheckBinary(z, 'daemon')
     yield from MacCheckBinary(z, 'daemonded')
     yield from MacCheckBinary(z, 'daemon-tty')
 
 def Windows32(z):
+    if not pefile:
+        yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
     yield from WindowsCheckAslr(z, 'daemon.exe', 32)
     yield from WindowsCheckAslr(z, 'daemonded.exe', 32)
     yield from WindowsCheckAslr(z, 'daemon-tty.exe', 32)
 
 def Windows64(z):
+    if not pefile:
+        yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
     yield from WindowsCheckAslr(z, 'daemon.exe', 64)
     yield from WindowsCheckAslr(z, 'daemonded.exe', 64)
     yield from WindowsCheckAslr(z, 'daemon-tty.exe', 64)
@@ -232,14 +240,6 @@ def CheckPkg(z, base):
     yield from CheckMd5sums(z, base, dpks)
     # TODO: Check DEPS files inside dpks?
 
-def CheckDependencies():
-    if not pefile:
-        yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
-    if not MachO:
-        yield 'Missing pip package: macholib. Unable to analyze Mac binaries without it.'
-    if not ELFFile:
-        yield 'Missing pip package: pyelftools. Unable to analyze Linux binaries without it.'
-
 OS_CHECKERS = (
     ('linux-amd64', Linux),
     ('macos-amd64', Mac),
@@ -248,7 +248,6 @@ OS_CHECKERS = (
 )
 
 def CheckRelease(filename, number):
-    yield from CheckDependencies()
     z = zipfile.ZipFile(filename)
     yield from CheckUnixPermissions(z)
     base = 'unvanquished_' + number + '/'
