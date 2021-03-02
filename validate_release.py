@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import collections
 import contextlib
 import hashlib
 import os
@@ -20,6 +21,7 @@ except ImportError:
 try:
     from elftools.elf.elffile import ELFFile
     from elftools.elf.dynamic import DynamicSection
+    from elftools.elf.gnuversions import GNUVerNeedSection
 except ImportError:
     ELFFile = None
 
@@ -39,6 +41,24 @@ def CheckUnixPermissions(z):
         permissions = (info.external_attr >> 16) & 0o7777
         if permissions not in normal:
             yield f"File '{info.filename}' in {z.filename} has odd permissions {oct(permissions)}"
+
+def LinuxCheckSymbolVersions(elf, binary):
+    v = lambda version: tuple(int(n) for n in version.split('.'))
+    maxes = collections.defaultdict(lambda: '0')
+    for section in elf.iter_sections():
+        if not isinstance(section, GNUVerNeedSection):
+            continue
+        for _, auxiliaries in section.iter_versions():
+            for aux in auxiliaries:
+                lib, _, version = aux.name.partition('_')
+                if v(version) > v(maxes[lib]):
+                    maxes[lib] = version
+    # Target supported versions are from Ubuntu 18.04
+    for lib, version in (('GLIBC', '2.27'), ('GLIBCXX', '3.4.25')):
+        if maxes[lib] == '0':
+            yield f"Can't detect symbol versions for {lib} on Linux binary {binary}"
+        elif v(maxes[lib]) > v(version):
+            yield f'Linux binary {binary} depends on a too-new symbol version {lib}_{maxes[lib]}'
 
 def LinuxCheckBinary(z, binary):
     if not ELFFile:
@@ -73,6 +93,9 @@ def LinuxCheckBinary(z, binary):
     if added or removed:
         changes = ['+' + x for x in added] + ['-' + x for x in removed]
         yield f"{binary} dynamic dependencies changed: " + ', '.join(changes)
+
+    # Check libc and libstdc++ symbol versions
+    yield from LinuxCheckSymbolVersions(elf, binary)
 
 def WindowsCheckAslr(z, binary, bitness):
     # Partially based on https://gist.github.com/wdormann/dcdba9840701c879115f9aa5c1ef86dc
