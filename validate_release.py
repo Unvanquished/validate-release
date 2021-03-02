@@ -210,7 +210,8 @@ def Symbols(z):
         platform = header[1]
         if binary == 'main.nexe':
             if not nacl_binary:
-                continue # Can't identify binary
+                yield "Can't identify the binary in symbol file " + filename
+                continue
             platform = 'NaCl' # NaCl symbol files have "Linux" as the OS
             binary = nacl_binary
         triple = (platform, header[2], binary)
