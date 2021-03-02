@@ -1,0 +1,2 @@
+# Force LF checkout to ensure deterministic zip files
+*.dir/** text=auto eol=lf
