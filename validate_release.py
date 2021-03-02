@@ -61,8 +61,6 @@ def LinuxCheckSymbolVersions(elf, binary):
             yield f'Linux binary {binary} depends on a too-new symbol version {lib}_{maxes[lib]}'
 
 def LinuxCheckBinary(z, binary):
-    if not ELFFile:
-        return
     elf = ELFFile(z.open(binary))
 
     # Check ASLR
@@ -99,8 +97,6 @@ def LinuxCheckBinary(z, binary):
 
 def WindowsCheckAslr(z, binary, bitness):
     # Partially based on https://gist.github.com/wdormann/dcdba9840701c879115f9aa5c1ef86dc
-    if not pefile:
-        return
     with z.open(binary) as f:
         bin = f.read()
     pe = pefile.PE(data=bin)
@@ -114,8 +110,6 @@ def WindowsCheckAslr(z, binary, bitness):
         yield f"64-bit Windows binary '{binary}' lacks High-Entropy VA flag"
 
 def MacCheckBinary(z, binary):
-    if not MachO:
-        return
     with TempUnzip(z, 'Unvanquished.app/Contents/MacOS/' + binary) as path:
         macho = MachO.MachO(path)
         header, = macho.headers
@@ -134,17 +128,19 @@ def MacCheckBinary(z, binary):
             yield f"Mac binary '{binary}' has unwanted rpaths {rpaths}"
 
 def Linux(z):
+    yield from CheckUnixPermissions(z)
     if not ELFFile:
         yield 'Missing pip package: pyelftools. Unable to analyze Linux binaries without it.'
-    yield from CheckUnixPermissions(z)
+        return
     yield from LinuxCheckBinary(z, 'daemon')
     yield from LinuxCheckBinary(z, 'daemonded')
     yield from LinuxCheckBinary(z, 'daemon-tty')
 
 def Mac(z):
+    yield from CheckUnixPermissions(z)
     if not MachO:
         yield 'Missing pip package: macholib. Unable to analyze Mac binaries without it.'
-    yield from CheckUnixPermissions(z)
+        return
     yield from MacCheckBinary(z, 'daemon')
     yield from MacCheckBinary(z, 'daemonded')
     yield from MacCheckBinary(z, 'daemon-tty')
@@ -152,6 +148,7 @@ def Mac(z):
 def Windows32(z):
     if not pefile:
         yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
+        return
     yield from WindowsCheckAslr(z, 'daemon.exe', 32)
     yield from WindowsCheckAslr(z, 'daemonded.exe', 32)
     yield from WindowsCheckAslr(z, 'daemon-tty.exe', 32)
@@ -159,6 +156,7 @@ def Windows32(z):
 def Windows64(z):
     if not pefile:
         yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
+        return
     yield from WindowsCheckAslr(z, 'daemon.exe', 64)
     yield from WindowsCheckAslr(z, 'daemonded.exe', 64)
     yield from WindowsCheckAslr(z, 'daemon-tty.exe', 64)
