@@ -22,6 +22,7 @@ try:
     from elftools.elf.elffile import ELFFile
     from elftools.elf.dynamic import DynamicSection
     from elftools.elf.gnuversions import GNUVerNeedSection
+    from elftools.elf.sections import NoteSection
 except ImportError:
     ELFFile = None
 
@@ -60,8 +61,28 @@ def LinuxCheckSymbolVersions(elf, binary):
         elif v(maxes[lib]) > v(version):
             yield f'Linux binary {binary} depends on a too-new symbol version {lib}_{maxes[lib]}'
 
-def LinuxCheckBinary(z, binary):
+def GetElfBuildId(elf):
+    for section in elf.iter_sections():
+        if not isinstance(section, NoteSection):
+            continue
+        for note in section.iter_notes():
+            if note['n_type'] == 'NT_GNU_BUILD_ID':
+                # Idiotic byte-swapping procedure from FileId::ConvertIdentifierToString
+                # in breakpad/src/common/linux/file_id.cc
+                bytes = (3,2,1,0, 5,4, 7,6, 8,9,10,11,12,13,14,15)
+                return ''.join(note['n_desc'][2*i: 2*i + 2] for i in bytes).upper() + '0'
+
+def StoreBuildId(id, os, triple, symids):
+    if id is None:
+        yield f'Missing build ID for {os} binary {triple[2]}'
+    elif triple in symids:
+        yield f'Multiple binaries for {triple}'
+    else:
+        symids[triple] = id
+
+def LinuxCheckBinary(z, binary, symids):
     elf = ELFFile(z.open(binary))
+    yield from StoreBuildId(GetElfBuildId(elf), 'Linux', ('Linux', 'x86_64', binary), symids)
 
     # Check ASLR
     if elf.header.e_type != 'ET_DYN':
@@ -95,7 +116,7 @@ def LinuxCheckBinary(z, binary):
     # Check libc and libstdc++ symbol versions
     yield from LinuxCheckSymbolVersions(elf, binary)
 
-def WindowsCheckAslr(z, binary, bitness):
+def WindowsCheckBinary(z, binary, bitness, symids):
     # Partially based on https://gist.github.com/wdormann/dcdba9840701c879115f9aa5c1ef86dc
     with z.open(binary) as f:
         bin = f.read()
@@ -108,6 +129,17 @@ def WindowsCheckAslr(z, binary, bitness):
         yield f"{bitness}-bit Windows binary '{binary}' has broken ASLR due to stripped relocs"
     elif bitness == 64 and not pe.OPTIONAL_HEADER.IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA:
         yield f"64-bit Windows binary '{binary}' lacks High-Entropy VA flag"
+
+    # Get build ID
+    try:
+        entry = pe.DIRECTORY_ENTRY_DEBUG[0].entry
+    except AttributeError:
+        id = None
+    else:
+        id = '%08X%04X%04X%s%X' % (entry.Signature_Data1, entry.Signature_Data2, entry.Signature_Data3,
+                                   '%02X' * 8 % tuple(entry.Signature_Data4), entry.Age)
+    arch = 'x86' + (bitness == 64) * '_64'
+    yield from StoreBuildId(id, f'{bitness}-bit Windows', ('windows', arch, binary), symids)
 
 def MacCheckBinary(z, binary):
     with TempUnzip(z, 'Unvanquished.app/Contents/MacOS/' + binary) as path:
@@ -127,16 +159,16 @@ def MacCheckBinary(z, binary):
         if rpaths:
             yield f"Mac binary '{binary}' has unwanted rpaths {rpaths}"
 
-def Linux(z):
+def Linux(z, symids):
     yield from CheckUnixPermissions(z)
     if not ELFFile:
-        yield 'Missing pip package: pyelftools. Unable to analyze Linux binaries without it.'
+        yield 'Missing pip package: pyelftools. Unable to analyze Linux or NaCl binaries without it.'
         return
-    yield from LinuxCheckBinary(z, 'daemon')
-    yield from LinuxCheckBinary(z, 'daemonded')
-    yield from LinuxCheckBinary(z, 'daemon-tty')
+    yield from LinuxCheckBinary(z, 'daemon', symids)
+    yield from LinuxCheckBinary(z, 'daemonded', symids)
+    yield from LinuxCheckBinary(z, 'daemon-tty', symids)
 
-def Mac(z):
+def Mac(z, _):
     yield from CheckUnixPermissions(z)
     if not MachO:
         yield 'Missing pip package: macholib. Unable to analyze Mac binaries without it.'
@@ -145,23 +177,23 @@ def Mac(z):
     yield from MacCheckBinary(z, 'daemonded')
     yield from MacCheckBinary(z, 'daemon-tty')
 
-def Windows32(z):
+def Windows32(z, symids):
     if not pefile:
         yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
         return
-    yield from WindowsCheckAslr(z, 'daemon.exe', 32)
-    yield from WindowsCheckAslr(z, 'daemonded.exe', 32)
-    yield from WindowsCheckAslr(z, 'daemon-tty.exe', 32)
+    yield from WindowsCheckBinary(z, 'daemon.exe', 32, symids)
+    yield from WindowsCheckBinary(z, 'daemonded.exe', 32, symids)
+    yield from WindowsCheckBinary(z, 'daemon-tty.exe', 32, symids)
 
-def Windows64(z):
+def Windows64(z, symids):
     if not pefile:
         yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
         return
-    yield from WindowsCheckAslr(z, 'daemon.exe', 64)
-    yield from WindowsCheckAslr(z, 'daemonded.exe', 64)
-    yield from WindowsCheckAslr(z, 'daemon-tty.exe', 64)
+    yield from WindowsCheckBinary(z, 'daemon.exe', 64, symids)
+    yield from WindowsCheckBinary(z, 'daemonded.exe', 64, symids)
+    yield from WindowsCheckBinary(z, 'daemon-tty.exe', 64, symids)
 
-def Symbols(z):
+def Symbols(z, symids):
     expected = {
         ('Linux', 'x86_64', 'daemon'),
         ('Linux', 'x86_64', 'daemonded'),
@@ -177,6 +209,8 @@ def Symbols(z):
         ('NaCl', 'x86', 'sgame'),
         ('NaCl', 'x86_64', 'sgame'),
     }
+    for triple in symids:
+        assert triple in expected
     for filename in z.namelist():
         if not filename.endswith('.sym'):
             continue
@@ -216,6 +250,8 @@ def Symbols(z):
             binary = nacl_binary
         triple = (platform, header[2], binary)
         if triple in expected:
+            if triple in symids and header[3] != symids[triple]:
+                yield f'Symbol file for {triple} has build ID {header[3]} but binary has {symids[triple]}'
             expected.remove(triple)
         else:
             yield 'Unexpected platform/arch/binary combination ' + str(triple)
@@ -245,15 +281,30 @@ def CheckMd5sums(z, base, dpks):
     for unmatched in dpks:
         yield 'Missing md5sums entry for file: ' + unmatched
 
-def CheckPkg(z, base):
+def FindVmBuildIds(dpk, symids):
+    dpk = zipfile.ZipFile(dpk)
+    for filename in dpk.namelist():
+        name, _, ext = filename.rpartition('.')
+        if ext != 'nexe':
+            continue
+        match = re.fullmatch('([cs]game)-(x86(?:_64)?)', name)
+        if not match:
+            yield 'Unexpected nexe: ' + filename
+            continue
+        id = GetElfBuildId(ELFFile(dpk.open(filename)))
+        yield from StoreBuildId(id, 'NaCl', ('NaCl', match.group(2), match.group(1)), symids)
+
+def CheckPkg(z, base, symids):
     base += 'pkg/'
     dpks = []
-    for name in z.namelist():
-        if not name.startswith(base) or name == base:
+    for fullname in z.namelist():
+        if not fullname.startswith(base) or fullname == base:
             continue
-        name = name[len(base):]
+        name = fullname[len(base):]
         if re.fullmatch(r'[^/]+\.dpk', name):
             dpks.append(name)
+            if ELFFile:
+                yield from FindVmBuildIds(z.open(fullname), symids)
         elif name != 'md5sums':
             yield 'Unexpected filename in pkg/ ' + repr(name)
     unvanquished = base.split('/')[0] + '.dpk'
@@ -273,6 +324,8 @@ def CheckRelease(filename, number):
     z = zipfile.ZipFile(filename)
     yield from CheckUnixPermissions(z)
     base = 'unvanquished_' + number + '/'
+    symids = {}
+    yield from CheckPkg(z, base, symids)
     for name, checker in OS_CHECKERS + (('symbols_' + number, Symbols),):
         name = base + name + '.zip'
         try:
@@ -280,9 +333,7 @@ def CheckRelease(filename, number):
         except KeyError:
             yield 'Missing file: ' + name
         else:
-            yield from checker(zipfile.ZipFile(z.open(info)))
-    yield from CheckPkg(z, base)
-
+            yield from checker(zipfile.ZipFile(z.open(info)), symids)
 
 def UsageError():
     sys.exit('Usage: validate_release.py <path to universal zip> [<version number>]\n'
@@ -316,10 +367,10 @@ if __name__ == '__main__':
     checker = dict(OS_CHECKERS).get(arg2)
     if checker:
         print('Checking the zip for platform %s' % arg2, file=sys.stderr)
-        generator = checker(zipfile.ZipFile(sys.argv[1]))
+        generator = checker(zipfile.ZipFile(sys.argv[1]), {})
     elif arg2 == 'symbols':
         print('Checking the symbols zip', file=sys.stderr)
-        generator = Symbols(zipfile.ZipFile(sys.argv[1]))
+        generator = Symbols(zipfile.ZipFile(sys.argv[1]), {})
     else:
         print('Checking the universal zip (version = %r)' % arg2, file=sys.stderr)
         generator = CheckRelease(sys.argv[1], arg2)

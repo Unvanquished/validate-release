@@ -16,6 +16,7 @@ Checks performed:
 - Hashes in `pkg/md5sums` match the packages
 - Normal file permissions for Unices (ones like on the NaCl files in 0.51.1 could prevent making an installation usable by someone other than the owner)
 - Linux binaries have no unexpected changes in dynamic dependencies
+- Build IDs in symbol files match chose of binaries (i.e. the symbols actually come from the right binary)
 
 Running the script on the 0.51.1 release produces the following output:
 
@@ -37,6 +38,10 @@ Running the script on the 0.51.1 release produces the following output:
     64-bit Windows binary 'daemon.exe' lacks High-Entropy VA flag
     64-bit Windows binary 'daemonded.exe' has broken ASLR due to stripped relocs
     64-bit Windows binary 'daemon-tty.exe' has broken ASLR due to stripped relocs
+    Symbol file for ('NaCl', 'x86', 'sgame') has build ID 8902049126D867E5897D40AB0F2DC6780 but binary has 66F09C53D34048FDF04BDB8EEA1A9D200
+    Symbol file for ('NaCl', 'x86_64', 'sgame') has build ID C9498DF8CB97E6D8AB695A71E06022250 but binary has AE7350E8C2C8B0C6B55BF6304B0F63080
+    Symbol file for ('NaCl', 'x86_64', 'cgame') has build ID B433923CACB8FF623BBE04A49790E5DF0 but binary has 3F7B53F3CF949C0FF124E7CC434522AC0
+    Symbol file for ('NaCl', 'x86', 'cgame') has build ID D7C1DE63233DF1608AF075FD4ADE10760 but binary has 3A19157B1F0C5CCB5142959D156CA9190
     Symbol file 'symbols/daemon-tty/943FEC32CDACF42E86E04FD87004F21E0/daemon-tty.sym' doesn't appear to actually have symbols (mistakenly used stripped binary?)
     Symbol file 'symbols/daemon/F8A1F45833C1977CD13657473592668C0/daemon.sym' doesn't appear to actually have symbols (mistakenly used stripped binary?)
     Symbol file 'symbols/daemonded/8B93DD8B64AA4CB9D7590EBCBD6CACA50/daemonded.sym' doesn't appear to actually have symbols (mistakenly used stripped binary?)
