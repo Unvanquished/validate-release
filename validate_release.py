@@ -334,6 +334,10 @@ def CheckRelease(filename, number):
             yield 'Missing file: ' + name
         else:
             yield from checker(zipfile.ZipFile(z.open(info)), symids)
+    try:
+        z.getinfo(base + 'README.txt')
+    except KeyError:
+        yield 'README.txt is missing'
 
 def UsageError():
     sys.exit('Usage: validate_release.py <path to universal zip> [<version number>]\n'
