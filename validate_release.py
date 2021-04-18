@@ -352,9 +352,9 @@ def GuessArg2(filename):
     name = filename[:-4]
     if name in dict(OS_CHECKERS):
         return name
-    if re.match(r'^unvanquished_[0-9.]+$', name):
+    if re.match(r'^unvanquished_[^_]+$', name):
         return name.split('_')[1]
-    if re.match(r'symbols_[0-9.]+$', name):
+    if re.match(r'symbols_[^_]+$', name):
         return 'symbols'
     return None
 
