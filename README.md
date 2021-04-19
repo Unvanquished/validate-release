@@ -18,9 +18,11 @@ Checks performed:
 - Linux binaries have no unexpected changes in dynamic dependencies
 - Build IDs in symbol files match chose of binaries (i.e. the symbols actually come from the right binary)
 
-Running the script on the 0.51.1 release produces the following output:
+Running the script on the 0.51.1 release produces the following output on stdout:
 
     # python3 validate_release.py unvanquished_0.51.1.zip
+    Unwanted file "symbols.7z" found in unvanquished_0.51.1/pkg/unvanquished_0.51.1.dpk
+    Missing md5sums file in pkg/
     File 'nacl_loader' in unvanquished_0.51.1/linux-amd64.zip has odd permissions 0o700
     File 'irt_core-x86_64.nexe' in unvanquished_0.51.1/linux-amd64.zip has odd permissions 0o600
     File 'nacl_helper_bootstrap' in unvanquished_0.51.1/linux-amd64.zip has odd permissions 0o700
@@ -45,4 +47,4 @@ Running the script on the 0.51.1 release produces the following output:
     Symbol file 'symbols/daemon-tty/943FEC32CDACF42E86E04FD87004F21E0/daemon-tty.sym' doesn't appear to actually have symbols (mistakenly used stripped binary?)
     Symbol file 'symbols/daemon/F8A1F45833C1977CD13657473592668C0/daemon.sym' doesn't appear to actually have symbols (mistakenly used stripped binary?)
     Symbol file 'symbols/daemonded/8B93DD8B64AA4CB9D7590EBCBD6CACA50/daemonded.sym' doesn't appear to actually have symbols (mistakenly used stripped binary?)
-    Missing md5sums file in pkg/
+    README.txt is missing
