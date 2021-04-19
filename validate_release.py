@@ -281,11 +281,14 @@ def CheckMd5sums(z, base, dpks):
     for unmatched in dpks:
         yield 'Missing md5sums entry for file: ' + unmatched
 
-def FindVmBuildIds(dpk, symids):
+def AnalyzeDpk(dpk, symids):
     dpk = zipfile.ZipFile(dpk)
     for filename in dpk.namelist():
         name, _, ext = filename.rpartition('.')
-        if ext != 'nexe':
+        if ext == '7z':
+            yield f'Unwanted file "{filename}" found in {dpk.filename}'
+            continue
+        if ext != 'nexe' or not ELFFile:
             continue
         match = re.fullmatch('([cs]game)-(x86(?:_64)?)', name)
         if not match:
@@ -303,8 +306,7 @@ def CheckPkg(z, base, symids):
         name = fullname[len(base):]
         if re.fullmatch(r'[^/]+\.dpk', name):
             dpks.append(name)
-            if ELFFile:
-                yield from FindVmBuildIds(z.open(fullname), symids)
+            yield from AnalyzeDpk(z.open(fullname), symids)
         elif name != 'md5sums':
             yield 'Unexpected filename in pkg/ ' + repr(name)
     unvanquished = base.split('/')[0] + '.dpk'
