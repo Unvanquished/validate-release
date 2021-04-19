@@ -281,12 +281,27 @@ def CheckMd5sums(z, base, dpks):
     for unmatched in dpks:
         yield 'Missing md5sums entry for file: ' + unmatched
 
+def IsValidVfsPath(path):
+    for component in path.split('/'):
+        for part in component.split('.'):
+            if not part:
+                return False
+            for c in part:
+                if not ('a' <= c <= 'z' or 'A' <= c <= 'Z' or '0' <= c <= '9' or c in '-_+~'):
+                    return False
+    return True
+
 def AnalyzeDpk(dpk, symids):
     dpk = zipfile.ZipFile(dpk)
     for filename in dpk.namelist():
+        if filename.endswith('/'):
+            continue
         name, _, ext = filename.rpartition('.')
         if ext == '7z':
             yield f'Unwanted file "{filename}" found in {dpk.filename}'
+            continue
+        if not IsValidVfsPath(filename):
+            yield f'{repr(filename)} in {dpk.filename} has a name invalid for the VFS'
             continue
         if ext != 'nexe' or not ELFFile:
             continue
