@@ -184,6 +184,8 @@ def Windows32(z, symids):
     yield from WindowsCheckBinary(z, 'daemon.exe', 32, symids)
     yield from WindowsCheckBinary(z, 'daemonded.exe', 32, symids)
     yield from WindowsCheckBinary(z, 'daemon-tty.exe', 32, symids)
+    for exe in {'nacl_loader.exe', 'nacl_loader64.exe'} - set(z.namelist()):
+        yield f'{z.filename} missing {exe}'
 
 def Windows64(z, symids):
     if not pefile:
@@ -192,6 +194,10 @@ def Windows64(z, symids):
     yield from WindowsCheckBinary(z, 'daemon.exe', 64, symids)
     yield from WindowsCheckBinary(z, 'daemonded.exe', 64, symids)
     yield from WindowsCheckBinary(z, 'daemon-tty.exe', 64, symids)
+    if 'nacl_loader.exe' not in z.namelist():
+        yield z.filename + ' missing nacl_loader.exe'
+    if 'nacl_loader64.exe' in z.namelist():
+        yield z.filename + ' should not have nacl_loader64.exe'
 
 def Symbols(z, symids):
     expected = {
