@@ -17,11 +17,15 @@ Checks performed:
 - Normal file permissions for Unices (ones like on the NaCl files in 0.51.1 could prevent making an installation usable by someone other than the owner)
 - Linux binaries have no unexpected changes in dynamic dependencies
 - Build IDs in symbol files match chose of binaries (i.e. the symbols actually come from the right binary)
+- DEPS graph of DPKs: all deps exist; no cycles; no unused packages
 
 Running the script on the 0.51.1 release produces the following output on stdout:
 
     # python3 validate_release.py unvanquished_0.51.1.zip
     Unwanted file "symbols.7z" found in unvanquished_0.51.1/pkg/unvanquished_0.51.1.dpk
+    Pak dependency cycle: res-players_0.51.dpk -> res-weapons_0.51.dpk -> res-buildables_0.51.dpk -> res-players_0.51.dpk
+    Pak dependency cycle: res-weapons_0.51.dpk -> res-buildables_0.51.dpk -> res-weapons_0.51.dpk
+    Pak dependency cycle: res-players_0.51.dpk -> res-weapons_0.51.dpk -> res-players_0.51.dpk
     Missing md5sums file in pkg/
     File 'nacl_loader' in unvanquished_0.51.1/linux-amd64.zip has odd permissions 0o700
     File 'irt_core-x86_64.nexe' in unvanquished_0.51.1/linux-amd64.zip has odd permissions 0o600

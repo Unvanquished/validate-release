@@ -297,8 +297,28 @@ def IsValidVfsPath(path):
                     return False
     return True
 
-def AnalyzeDpk(dpk, symids):
+# See ParseDeps in daemon/src/common/FileSystem.cpp
+def ParseDeps(dpk, out):
+    try:
+        info = dpk.getinfo('DEPS')
+    except KeyError:
+        return
+    with dpk.open(info) as deps:
+        for line in deps:
+            line = line.decode('utf-8')
+            fields = line.split()
+            if not fields:
+                continue
+            if len(fields) > 2:
+                yield f'Bad DEPS line in {dpk.filename}: {repr(line)}'
+            if len(fields) == 1:
+                out.append((fields[0], None))
+            else:
+                out.append((fields[0], fields[1]))
+
+def AnalyzeDpk(dpk, symids, deps):
     dpk = zipfile.ZipFile(dpk)
+    yield from ParseDeps(dpk, deps)
     for filename in dpk.namelist():
         if filename.endswith('/'):
             continue
@@ -318,23 +338,81 @@ def AnalyzeDpk(dpk, symids):
         id = GetElfBuildId(ELFFile(dpk.open(filename)))
         yield from StoreBuildId(id, 'NaCl', ('NaCl', match.group(2), match.group(1)), symids)
 
+# See VersionCmp in daemon/src/common/FileSystem.cpp
+def VersionCompareKey(version):
+    key = []
+    for num, char in re.findall(r'([0-9]+)|(.)', version):
+        if num:
+            key += [0, int(num)]
+        elif 'a' <= char.lower() < 'z':
+            key.append(ord(char))
+        elif char == '~':
+            key.append(-1)
+        else:
+            key.append(ord(char) + 256)
+    if key[-1] == 0: # Having a zero number at the end does not affect the sorting, e.g. "a00" == "a"
+        key.pop()
+    else:
+        key.append(0)
+    return key
+
+def LookUpPak(name, version, depmap):
+    if version is None:
+        version = max((version for n, version in depmap if n == name), key=VersionCompareKey, default=None)
+    if (name, version) in depmap:
+        return name, version
+    return None
+
+def PakFilename(pak):
+    name, version = pak
+    return f'{name}_{version}.dpk'
+
+def CheckDependencyGraph(depmap):
+    visited = set()
+    stack = []
+    def VisitPak(spec):
+        pak = LookUpPak(*spec, depmap)
+        if not pak:
+            yield PakFilename(stack[-1]) + ' has nonexistent dependency ' + str(spec)
+            return
+        if pak in stack:
+            yield 'Pak dependency cycle: ' + ' -> '.join(map(PakFilename, stack[stack.index(pak):] + [pak]))
+            return
+        if pak in visited:
+            return
+        visited.add(pak)
+        stack.append(pak)
+        for dep in depmap[pak]:
+            yield from VisitPak(dep)
+        stack.pop()
+
+    for root in {name for name, _ in depmap if name == 'unvanquished' or name.startswith('map-')}:
+        yield from VisitPak((root, None))
+    for leftover in set(depmap) - visited:
+        yield 'No pak depends on ' + PakFilename(leftover)
+
 def CheckPkg(z, base, symids):
     base += 'pkg/'
-    dpks = []
+    depmap = {}
     for fullname in z.namelist():
         if not fullname.startswith(base) or fullname == base:
             continue
         name = fullname[len(base):]
-        if re.fullmatch(r'[^/]+\.dpk', name):
-            dpks.append(name)
-            yield from AnalyzeDpk(z.open(fullname), symids)
+        m = re.fullmatch(r'([^_/]+)_([^_/]+)\.dpk', name)
+        if m:
+            deps = []
+            yield from AnalyzeDpk(z.open(fullname), symids, deps)
+            depmap[m.group(1), m.group(2)] = deps
         elif name != 'md5sums':
             yield 'Unexpected filename in pkg/ ' + repr(name)
-    unvanquished = base.split('/')[0] + '.dpk'
-    if unvanquished not in dpks:
-        yield 'Expected there to be a package named ' + unvanquished
-    yield from CheckMd5sums(z, base, dpks)
-    # TODO: Check DEPS files inside dpks?
+    unvanquished = LookUpPak('unvanquished', None, depmap)
+    release = base.split('/')[0].split('_')[1]
+    if unvanquished is None:
+        yield "Missing 'unvanquished' package"
+    elif unvanquished[1] != release:
+        yield f'Release version is {release} but highest Unvanquished package is {unvanquished[1]}'
+    yield from CheckDependencyGraph(depmap)
+    yield from CheckMd5sums(z, base, [PakFilename(pak) for pak in depmap])
 
 OS_CHECKERS = (
     ('linux-amd64', Linux),
