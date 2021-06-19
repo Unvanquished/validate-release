@@ -316,7 +316,7 @@ def ParseDeps(dpk, out):
             else:
                 out.append((fields[0], fields[1]))
 
-def AnalyzeDpk(dpk, symids, deps):
+def AnalyzeDpk(dpk, unv, symids, deps):
     dpk = zipfile.ZipFile(dpk)
     yield from ParseDeps(dpk, deps)
     for filename in dpk.namelist():
@@ -332,11 +332,11 @@ def AnalyzeDpk(dpk, symids, deps):
         if ext != 'nexe' or not ELFFile:
             continue
         match = re.fullmatch('([cs]game)-(x86(?:_64)?)', name)
-        if not match:
-            yield 'Unexpected nexe: ' + filename
-            continue
-        id = GetElfBuildId(ELFFile(dpk.open(filename)))
-        yield from StoreBuildId(id, 'NaCl', ('NaCl', match.group(2), match.group(1)), symids)
+        if not match or unv == 0:
+            yield f'Unexpected nexe "{filename}" in {dpk.filename}'
+        elif unv == 1:
+            id = GetElfBuildId(ELFFile(dpk.open(filename)))
+            yield from StoreBuildId(id, 'NaCl', ('NaCl', match.group(2), match.group(1)), symids)
 
 # See VersionCmp in daemon/src/common/FileSystem.cpp
 def VersionCompareKey(version):
@@ -391,7 +391,7 @@ def CheckDependencyGraph(depmap):
     for leftover in set(depmap) - visited:
         yield 'No pak depends on ' + PakFilename(leftover)
 
-def CheckPkg(z, base, symids):
+def CheckPkg(z, base, number, symids):
     base += 'pkg/'
     depmap = {}
     for fullname in z.namelist():
@@ -401,7 +401,13 @@ def CheckPkg(z, base, symids):
         m = re.fullmatch(r'([^_/]+)_([^_/]+)\.dpk', name)
         if m:
             deps = []
-            yield from AnalyzeDpk(z.open(fullname), symids, deps)
+            if m.group(1) != 'unvanquished':
+                unv = 0
+            elif m.group(2) == number:
+                unv = 1
+            else:
+                unv = 2
+            yield from AnalyzeDpk(z.open(fullname), unv, symids, deps)
             depmap[m.group(1), m.group(2)] = deps
         elif name != 'md5sums':
             yield 'Unexpected filename in pkg/ ' + repr(name)
@@ -426,7 +432,7 @@ def CheckRelease(filename, number):
     yield from CheckUnixPermissions(z)
     base = 'unvanquished_' + number + '/'
     symids = {}
-    yield from CheckPkg(z, base, symids)
+    yield from CheckPkg(z, base, number, symids)
     for name, checker in OS_CHECKERS + (('symbols_' + number, Symbols),):
         name = base + name + '.zip'
         try:
