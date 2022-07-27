@@ -220,7 +220,7 @@ def Symbols(z, symids):
     for filename in z.namelist():
         if not filename.endswith('.sym'):
             continue
-        m = re.fullmatch(r'symbols/([^/]+)/([0-9A-F]+)/([^/]+)\.sym', filename)
+        m = re.fullmatch(r'([^/]+)/([0-9A-F]+)/([^/]+)\.sym', filename)
         if not m:
             yield 'Symbol filename %r does not match expected pattern' % filename
             continue
