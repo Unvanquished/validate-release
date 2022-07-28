@@ -6,7 +6,7 @@ Usage:
 
     validate_release.py <zip file>
 
-    `<zip file>` may be the universal zip, or any of the platform-specific or symbols zips contained therein. If the zip file is named according to conventions, the script guesses which one it is. If the file is named differently, the type of zip file to look for can be specified as a second argument (see the usage string in the script).
+`<zip file>` may be the universal zip, or any of the platform-specific or symbols zips contained therein. If the zip file is named according to conventions, the script guesses which one it is. If the file is named differently, the type of zip file to look for can be specified as a second argument (see the usage string in the script).
 
 The script has been tested on Linux and Windows. Pure Python libraries are used to analyze the various binary formats, so it should work on any platform.
 
