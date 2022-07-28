@@ -19,7 +19,7 @@ Checks performed:
 - Build IDs in symbol files match chose of binaries (i.e. the symbols actually come from the right binary)
 - DEPS graph of DPKs: all deps exist; no cycles; no unused packages
 
-Running the script on the 0.51.1 release produces the following output on stdout:
+Running the script on the 0.51.1 release produces the following output on stdout as of commit d7c72954:
 
     # python3 validate_release.py unvanquished_0.51.1.zip
     Unwanted file "symbols.7z" found in unvanquished_0.51.1/pkg/unvanquished_0.51.1.dpk
