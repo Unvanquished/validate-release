@@ -386,7 +386,7 @@ def CheckDependencyGraph(depmap):
             yield from VisitPak(dep)
         stack.pop()
 
-    for root in {name for name, _ in depmap if name == 'unvanquished' or name.startswith('map-')}:
+    for root in {name for name, _ in depmap if name in ['unvanquished', 'res-leveleditor'] or name.startswith('map-')}:
         yield from VisitPak((root, None))
     for leftover in set(depmap) - visited:
         yield 'No pak depends on ' + PakFilename(leftover)
