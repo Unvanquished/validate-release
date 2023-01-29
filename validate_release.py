@@ -184,7 +184,7 @@ def Windows32(z, symids):
     yield from WindowsCheckBinary(z, 'daemon.exe', 32, symids)
     yield from WindowsCheckBinary(z, 'daemonded.exe', 32, symids)
     yield from WindowsCheckBinary(z, 'daemon-tty.exe', 32, symids)
-    for exe in {'nacl_loader.exe', 'nacl_loader64.exe'} - set(z.namelist()):
+    for exe in {'nacl_loader.exe', 'nacl_loader-amd64.exe'} - set(z.namelist()):
         yield f'{z.filename} missing {exe}'
 
 def Windows64(z, symids):
@@ -196,8 +196,8 @@ def Windows64(z, symids):
     yield from WindowsCheckBinary(z, 'daemon-tty.exe', 64, symids)
     if 'nacl_loader.exe' not in z.namelist():
         yield z.filename + ' missing nacl_loader.exe'
-    if 'nacl_loader64.exe' in z.namelist():
-        yield z.filename + ' should not have nacl_loader64.exe'
+    if 'nacl_loader-amd64.exe' in z.namelist():
+        yield z.filename + ' should not have nacl_loader-amd64.exe'
 
 def Symbols(z, symids):
     expected = {
@@ -331,7 +331,7 @@ def AnalyzeDpk(dpk, unv, symids, deps):
             continue
         if ext != 'nexe' or not ELFFile:
             continue
-        match = re.fullmatch('([cs]game)-(x86(?:_64)?)', name)
+        match = re.fullmatch('([cs]game)-(i686|amd64)', name)
         if not match or unv == 0:
             yield f'Unexpected nexe "{filename}" in {dpk.filename}'
         elif unv == 1:
