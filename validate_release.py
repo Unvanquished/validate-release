@@ -424,6 +424,8 @@ def CheckPkg(z, base, number, symids):
         name = fullname[len(base):]
         m = re.fullmatch(r'([^_/]+)_([^_/]+)\.dpk', name)
         if m:
+            if '-dirty' in m.group(2):
+                yield 'Dirty version string detected: ' + name
             deps = []
             if m.group(1) != 'unvanquished':
                 unv = 0
