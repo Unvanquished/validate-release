@@ -39,9 +39,10 @@ def TempUnzip(z, filename):
 # https://unix.stackexchange.com/a/14727
 def CheckUnixPermissions(z):
     normal = 0o644, 0o755
+    symlink = 0o120777 # Alternative permissions for symlink
     for info in z.infolist():
-        permissions = (info.external_attr >> 16) & 0o7777
-        if permissions not in normal:
+        permissions = info.external_attr >> 16
+        if permissions & 0o7777 not in normal and permissions != symlink:
             yield f"File '{info.filename}' in {z.filename} has odd permissions {oct(permissions)}"
 
 def LinuxCheckSymbolVersions(elf, binary):
