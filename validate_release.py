@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#! /usr/bin/env python3
 
 import collections
 import contextlib
@@ -45,7 +45,19 @@ def CheckUnixPermissions(z):
         if permissions & 0o7777 not in normal and permissions != symlink:
             yield f"File '{info.filename}' in {z.filename} has odd permissions {oct(permissions)}"
 
-def LinuxCheckSymbolVersions(elf, binary):
+def LinuxCheckSymbolVersions(elf, binary, arch):
+    # Target supported versions are from Debian 10 Buster
+    lib_versions = {
+        'amd64': (('GLIBC', '2.27'), ('GLIBCXX', '3.4.25')),
+        'i686':  (('GLIBC', '2.28'), ('GLIBCXX', '3.4.25')),
+        'arm64': (('GLIBC', '2.27'), ('GLIBCXX', '3.4.25')),
+        'armhf': None, # Not yet implemented for 32-bit ARM
+    }
+    if arch not in lib_versions.keys():
+        yield f'Unknown Linux binary {binary} ({arch})'
+        return
+    if not lib_versions[arch]:
+        return
     v = lambda version: tuple(int(n) for n in version.split('.'))
     maxes = collections.defaultdict(lambda: '0')
     for section in elf.iter_sections():
@@ -56,12 +68,11 @@ def LinuxCheckSymbolVersions(elf, binary):
                 lib, _, version = aux.name.partition('_')
                 if v(version) > v(maxes[lib]):
                     maxes[lib] = version
-    # Target supported versions are from Ubuntu 18.04
-    for lib, version in (('GLIBC', '2.27'), ('GLIBCXX', '3.4.25')):
+    for lib, version in lib_versions[arch]:
         if maxes[lib] == '0':
-            yield f"Can't detect symbol versions for {lib} on Linux binary {binary}"
+            yield f"Can't detect symbol versions for {lib} on Linux binary {binary} ({arch})"
         elif v(maxes[lib]) > v(version):
-            yield f'Linux binary {binary} depends on a too-new symbol version {lib}_{maxes[lib]}'
+            yield f'Linux binary {binary} ({arch}) depends on a too-new symbol version {lib}_{maxes[lib]}'
 
 def GetElfBuildId(elf):
     for section in elf.iter_sections():
@@ -84,7 +95,7 @@ def StoreBuildId(id, os, triple, symids):
 
 def LinuxCheckBinary(z, arch, binary, symids):
     elf = ELFFile(z.open(binary))
-    yield from StoreBuildId(GetElfBuildId(elf), 'Linux', ('Linux', arch, binary), symids)
+    yield from StoreBuildId(GetElfBuildId(elf), 'linux', ('linux', arch, binary), symids)
 
     # Check ASLR
     if elf.header.e_type != 'ET_DYN':
@@ -114,25 +125,25 @@ def LinuxCheckBinary(z, arch, binary, symids):
     removed = expected - deps
     if added or removed:
         changes = ['+' + x for x in added] + ['-' + x for x in removed]
-        yield f"{arch} {binary} dynamic dependencies changed: " + ', '.join(changes)
+        yield f"Linux {arch} binary {binary} dynamic dependencies changed: " + ', '.join(changes)
 
     # Check libc and libstdc++ symbol versions
-    if arch != 'armhf': # Not yet implemented for 32-bit ARM - symbol versions are different somehow
-        yield from LinuxCheckSymbolVersions(elf, f"{binary} ({arch})")
+    yield from LinuxCheckSymbolVersions(elf, binary, arch)
 
-def WindowsCheckBinary(z, binary, bitness, symids):
+def WindowsCheckBinary(z, arch, binary, symids):
     # Partially based on https://gist.github.com/wdormann/dcdba9840701c879115f9aa5c1ef86dc
     with z.open(binary) as f:
         bin = f.read()
     pe = pefile.PE(data=bin)
+    bitness = [32, 64][arch == 'amd64']
     assert (bitness == 32) == pe.FILE_HEADER.IMAGE_FILE_32BIT_MACHINE
     if not pe.OPTIONAL_HEADER.IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE:
-        yield f"{bitness}-bit Windows binary '{binary}' does not have ASLR (DYNAMICBASE)"
+        yield f"Windows {arch} binary '{binary}' does not have ASLR (DYNAMICBASE)"
     elif pe.FILE_HEADER.IMAGE_FILE_RELOCS_STRIPPED:
         # https://nvd.nist.gov/vuln/detail/CVE-2018-5392
-        yield f"{bitness}-bit Windows binary '{binary}' has broken ASLR due to stripped relocs"
+        yield f"Windows {arch} binary '{binary}' has broken ASLR due to stripped relocs"
     elif bitness == 64 and not pe.OPTIONAL_HEADER.IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA:
-        yield f"64-bit Windows binary '{binary}' lacks High-Entropy VA flag"
+        yield f"Windows {arch} binary '{binary}' lacks High-Entropy VA flag"
 
     # Get build ID
     try:
@@ -142,10 +153,9 @@ def WindowsCheckBinary(z, binary, bitness, symids):
     else:
         id = '%08X%04X%04X%s%X' % (entry.Signature_Data1, entry.Signature_Data2, entry.Signature_Data3,
                                    '%02X' * 8 % tuple(entry.Signature_Data4), entry.Age)
-    arch = ['i686', 'amd64'][bitness == 64]
     yield from StoreBuildId(id, f'{bitness}-bit Windows', ('windows', arch, binary), symids)
 
-def MacCheckBinary(z, binary):
+def MacOSCheckBinary(z, arch, binary):
     with TempUnzip(z, 'Unvanquished.app/Contents/MacOS/' + binary) as path:
         macho = MachO.MachO(path)
         header, = macho.headers
@@ -153,7 +163,7 @@ def MacCheckBinary(z, binary):
         # Check PIE
         MH_PIE = 0x200000
         if not header.header.flags & MH_PIE:
-            yield f"Mac binary '{binary}' is not PIE"
+            yield f"macOS {arch} binary '{binary}' is not PIE"
 
         # Check rpath
         rpaths = {command[2].rstrip(b'\0').rstrip(b'/')
@@ -161,75 +171,76 @@ def MacCheckBinary(z, binary):
                   if isinstance(command[1], mach_o.rpath_command)}
         rpaths.discard(b'@executable_path')
         if rpaths:
-            yield f"Mac binary '{binary}' has unwanted rpaths {rpaths}"
+            yield f"macOS {arch} binary '{binary}' has unwanted rpaths {rpaths}"
 
-def Linux(arch, z, symids):
+ENGINE_PLATFORMS = [
+    'linux-amd64',
+    'linux-i686',
+    'linux-arm64',
+    'linux-armhf',
+    'macos-amd64',
+    'windows-amd64',
+    'windows-i686',
+]
+
+ENGINE_BINARIES = [ 'daemon', 'daemonded', 'daemon-tty' ]
+GAME_ARCHITECTURES = [ 'amd64', 'i686', 'armhf' ]
+GAME_BINARIES = [ 'cgame', 'sgame' ]
+
+def CheckLinux(z, arch, symids):
     yield from CheckUnixPermissions(z)
     if not ELFFile:
         yield 'Missing pip package: pyelftools. Unable to analyze Linux or NaCl binaries without it.'
         return
-    yield from LinuxCheckBinary(z, arch, 'daemon', symids)
-    yield from LinuxCheckBinary(z, arch, 'daemonded', symids)
-    yield from LinuxCheckBinary(z, arch, 'daemon-tty', symids)
+    for binary in ENGINE_BINARIES:
+        yield from LinuxCheckBinary(z, arch, binary, symids)
 
-def Mac(z, _):
+def CheckMacOS(z, arch, _):
     yield from CheckUnixPermissions(z)
     if not MachO:
         yield 'Missing pip package: macholib. Unable to analyze Mac binaries without it.'
         return
-    yield from MacCheckBinary(z, 'daemon')
-    yield from MacCheckBinary(z, 'daemonded')
-    yield from MacCheckBinary(z, 'daemon-tty')
+    for binary in ENGINE_BINARIES:
+        yield from MacOSCheckBinary(z, arch, binary)
 
-def Windows32(z, symids):
+def CheckWindows(z, arch, symids):
     if not pefile:
         yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
         return
-    yield from WindowsCheckBinary(z, 'daemon.exe', 32, symids)
-    yield from WindowsCheckBinary(z, 'daemonded.exe', 32, symids)
-    yield from WindowsCheckBinary(z, 'daemon-tty.exe', 32, symids)
-    for exe in {'nacl_loader.exe', 'nacl_loader-amd64.exe'} - set(z.namelist()):
-        yield f'{z.filename} missing {exe}'
+    for binary in ENGINE_BINARIES:
+        yield from WindowsCheckBinary(z, arch, f'{binary}.exe', symids)
+    if arch == 'i686':
+        for exe in {'nacl_loader.exe', 'nacl_loader-amd64.exe'} - set(z.namelist()):
+            yield f'{z.filename} missing {exe}'
+    elif arch == 'amd64':
+        if 'nacl_loader.exe' not in z.namelist():
+            yield z.filename + ' missing nacl_loader.exe'
+        if 'nacl_loader-amd64.exe' in z.namelist():
+            yield z.filename + ' should not have nacl_loader-amd64.exe'
 
-def Windows64(z, symids):
-    if not pefile:
-        yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
-        return
-    yield from WindowsCheckBinary(z, 'daemon.exe', 64, symids)
-    yield from WindowsCheckBinary(z, 'daemonded.exe', 64, symids)
-    yield from WindowsCheckBinary(z, 'daemon-tty.exe', 64, symids)
-    if 'nacl_loader.exe' not in z.namelist():
-        yield z.filename + ' missing nacl_loader.exe'
-    if 'nacl_loader-amd64.exe' in z.namelist():
-        yield z.filename + ' should not have nacl_loader-amd64.exe'
+SYSTEM_CHECKERS = {
+    'linux': CheckLinux,
+    'macos': CheckMacOS,
+    'windows': CheckWindows,
+}
 
-def Symbols(z, symids):
-    expected = {
-        ('Linux', 'i686', 'daemon'),
-        ('Linux', 'i686', 'daemonded'),
-        ('Linux', 'i686', 'daemon-tty'),
-        ('Linux', 'amd64', 'daemon'),
-        ('Linux', 'amd64', 'daemonded'),
-        ('Linux', 'amd64', 'daemon-tty'),
-        ('Linux', 'armhf', 'daemon'),
-        ('Linux', 'armhf', 'daemonded'),
-        ('Linux', 'armhf', 'daemon-tty'),
-        ('Linux', 'arm64', 'daemon'),
-        ('Linux', 'arm64', 'daemonded'),
-        ('Linux', 'arm64', 'daemon-tty'),
-        ('windows', 'i686', 'daemon.exe'),
-        ('windows', 'i686', 'daemonded.exe'),
-        ('windows', 'i686', 'daemon-tty.exe'),
-        ('windows', 'amd64', 'daemon.exe'),
-        ('windows', 'amd64', 'daemonded.exe'),
-        ('windows', 'amd64', 'daemon-tty.exe'),
-        ('NaCl', 'armhf', 'cgame'),
-        ('NaCl', 'i686', 'cgame'),
-        ('NaCl', 'amd64', 'cgame'),
-        ('NaCl', 'armhf', 'sgame'),
-        ('NaCl', 'i686', 'sgame'),
-        ('NaCl', 'amd64', 'sgame'),
-    }
+def GetExpectedTriple():
+    expected = []
+    for platform in ENGINE_PLATFORMS:
+        system, arch = platform.split('-')
+        if system == 'macos': # Not implemented yet
+            continue
+        for binary in ENGINE_BINARIES:
+            if system == 'windows':
+                binary = f'{binary}.exe'
+            expected.append((system, arch, binary))
+    for arch in GAME_ARCHITECTURES:
+        for binary in GAME_BINARIES:
+            expected.append(('nacl', arch, binary))
+    return expected
+
+def CheckSymbols(z, symids):
+    expected = GetExpectedTriple()
     for triple in symids:
         assert triple in expected
     for filename in z.namelist():
@@ -262,12 +273,19 @@ def Symbols(z, symids):
                 nacl_binary = 'sgame'
         if not anything:
             yield "Symbol file %r doesn't appear to actually have symbols (mistakenly used stripped binary?)" % filename
-        platform = header[1]
+        try:
+            system = {
+                'windows': 'windows',
+                'Linux': 'linux',
+            }[header[1]]
+        except KeyError:
+            yield 'Unexpected system %r in %r' % (header[1], filename)
+            continue
         if binary == 'main.nexe':
             if not nacl_binary:
                 yield "Can't identify the binary in symbol file " + filename
                 continue
-            platform = 'NaCl' # NaCl symbol files have "Linux" as the OS
+            system = 'nacl' # NaCl symbol files have "Linux" as the OS
             binary = nacl_binary
         try:
             arch = {
@@ -277,15 +295,15 @@ def Symbols(z, symids):
                 'x86_64': 'amd64',
             }[header[2]]
         except KeyError:
-            yield 'Unexpected NaCl architecure %r in %r' % (header[2], filename)
+            yield 'Unexpected NaCl architecture %r in %r' % (header[2], filename)
             continue
-        triple = (platform, arch, binary)
+        triple = (system, arch, binary)
         if triple in expected:
             if triple in symids and header[3] != symids[triple]:
                 yield f'Symbol file for {triple} has build ID {header[3]} but binary has {symids[triple]}'
             expected.remove(triple)
         else:
-            yield 'Unexpected platform/arch/binary combination ' + str(triple)
+            yield 'Unexpected system/arch/binary combination ' + str(triple)
     for missing in expected:
         yield 'No symbols found for ' + str(missing)
 
@@ -361,7 +379,7 @@ def AnalyzeDpk(dpk, unv, symids, deps):
             yield f'Unexpected nexe "{filename}" in {dpk.filename}'
         elif unv == 1:
             id = GetElfBuildId(ELFFile(dpk.open(filename)))
-            yield from StoreBuildId(id, 'NaCl', ('NaCl', match.group(2), match.group(1)), symids)
+            yield from StoreBuildId(id, 'nacl', ('nacl', match.group(2), match.group(1)), symids)
 
 # See VersionCmp in daemon/src/common/FileSystem.cpp
 def VersionCompareKey(version):
@@ -447,39 +465,34 @@ def CheckPkg(z, base, number, symids):
     yield from CheckDependencyGraph(depmap)
     yield from CheckMd5sums(z, base, [PakFilename(pak) for pak in depmap])
 
-OS_CHECKERS = (
-    ('linux-i686', functools.partial(Linux, 'i686')),
-    ('linux-amd64', functools.partial(Linux, 'amd64')),
-    ('linux-armhf', functools.partial(Linux, 'armhf')),
-    ('linux-arm64', functools.partial(Linux, 'arm64')),
-    ('macos-amd64', Mac),
-    ('windows-i686', Windows32),
-    ('windows-amd64', Windows64),
-)
-
 def CheckRelease(filename, number):
     z = zipfile.ZipFile(filename)
     yield from CheckUnixPermissions(z)
-    base = 'unvanquished_' + number + '/'
+    parent = 'unvanquished_' + number + '/'
     symids = {}
-    yield from CheckPkg(z, base, number, symids)
-    for name, checker in OS_CHECKERS + (('symbols_' + number, Symbols),):
-        name = base + name + '.zip'
+    yield from CheckPkg(z, parent, number, symids)
+    for base in ENGINE_PLATFORMS + ['symbols_' + number]:
+        name = parent + base + '.zip'
         try:
             info = z.getinfo(name)
         except KeyError:
             yield 'Missing file: ' + name
         else:
-            yield from checker(zipfile.ZipFile(z.open(info)), symids)
+            zz = zipfile.ZipFile(z.open(info))
+            if base.startswith('symbols_'):
+                yield from CheckSymbols(zz, symids)
+            else:
+                system, arch = base.split('-')
+                yield from SYSTEM_CHECKERS[system](zz, arch, symids)
     try:
-        z.getinfo(base + 'README.txt')
+        z.getinfo(parent + 'README.txt')
     except KeyError:
         yield 'README.txt is missing'
 
 def UsageError():
     sys.exit('Usage: validate_release.py <path to universal zip> [<version number>]\n'
              '       validate_release.py <path to symbols zip> [symbols]\n'
-             '       validate_release.py <path to OS-specific zip> [linux-amd64 | macos-amd64 | windows-i686 | windows-amd64]')
+             '       validate_release.py <path to system-specific zip> [linux-amd64 | macos-amd64 | windows-i686 | windows-amd64]')
 
 def GuessArg2(filename):
     """Try to guess the desired action from the zip file name."""
@@ -487,7 +500,7 @@ def GuessArg2(filename):
     if not filename.endswith('.zip'):
         return None
     name = filename[:-4]
-    if name in dict(OS_CHECKERS):
+    if name in ENGINE_PLATFORMS:
         return name
     if re.match(r'^unvanquished_[^_]+$', name):
         return name.split('_')[1]
@@ -505,13 +518,13 @@ if __name__ == '__main__':
         arg2 = sys.argv[2]
     else:
         UsageError()
-    checker = dict(OS_CHECKERS).get(arg2)
-    if checker:
+    if arg2 in ENGINE_PLATFORMS:
         print('Checking the zip for platform %s' % arg2, file=sys.stderr)
-        generator = checker(zipfile.ZipFile(sys.argv[1]), {})
+        system, arch = arg2.split('-')
+        generator = SYSTEM_CHECKERS[system](zipfile.ZipFile(sys.argv[1]), arch, {})
     elif arg2 == 'symbols':
         print('Checking the symbols zip', file=sys.stderr)
-        generator = Symbols(zipfile.ZipFile(sys.argv[1]), {})
+        generator = CheckSymbols(zipfile.ZipFile(sys.argv[1]), {})
     else:
         print('Checking the universal zip (version = %r)' % arg2, file=sys.stderr)
         generator = CheckRelease(sys.argv[1], arg2)
