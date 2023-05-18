@@ -185,7 +185,6 @@ ENGINE_PLATFORMS = [
 
 ENGINE_BINARIES = ['daemon', 'daemonded', 'daemon-tty']
 
-
 def CheckLinux(z, arch, symids):
     yield from CheckUnixPermissions(z)
     if not ELFFile:
@@ -224,32 +223,24 @@ SYSTEM_CHECKERS = {
 }
 
 def CheckSymbols(z, symids):
-    expected = {
-        ('Linux', 'i686', 'daemon'),
-        ('Linux', 'i686', 'daemonded'),
-        ('Linux', 'i686', 'daemon-tty'),
-        ('Linux', 'amd64', 'daemon'),
-        ('Linux', 'amd64', 'daemonded'),
-        ('Linux', 'amd64', 'daemon-tty'),
-        ('Linux', 'armhf', 'daemon'),
-        ('Linux', 'armhf', 'daemonded'),
-        ('Linux', 'armhf', 'daemon-tty'),
-        ('Linux', 'arm64', 'daemon'),
-        ('Linux', 'arm64', 'daemonded'),
-        ('Linux', 'arm64', 'daemon-tty'),
-        ('windows', 'i686', 'daemon.exe'),
-        ('windows', 'i686', 'daemonded.exe'),
-        ('windows', 'i686', 'daemon-tty.exe'),
-        ('windows', 'amd64', 'daemon.exe'),
-        ('windows', 'amd64', 'daemonded.exe'),
-        ('windows', 'amd64', 'daemon-tty.exe'),
-        ('NaCl', 'armhf', 'cgame'),
-        ('NaCl', 'i686', 'cgame'),
-        ('NaCl', 'amd64', 'cgame'),
-        ('NaCl', 'armhf', 'sgame'),
-        ('NaCl', 'i686', 'sgame'),
-        ('NaCl', 'amd64', 'sgame'),
-    }
+    linux_binaries = ENGINE_BINARIES
+    windows_binaries = [f"{x}.exe" for x in ENGINE_BINARIES]
+    game_binaries = ['cgame', 'sgame']
+    expected_per_platform = [
+        ('Linux', 'i686', linux_binaries),
+        ('Linux', 'amd64', linux_binaries),
+        ('Linux', 'armhf', linux_binaries),
+        ('Linux', 'arm64', linux_binaries),
+        ('windows', 'i686', windows_binaries),
+        ('windows', 'amd64', windows_binaries),
+        ('NaCl', 'armhf', game_binaries),
+        ('NaCl', 'i686', game_binaries),
+        ('NaCl', 'amd64', game_binaries),
+    ]
+    expected = []
+    for system, arch, binaries in expected_per_platform:
+        for binary in binaries:
+            expected.append((system, arch, binary))
     for triple in symids:
         assert triple in expected
     for filename in z.namelist():
