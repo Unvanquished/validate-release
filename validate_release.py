@@ -492,9 +492,10 @@ def CheckRelease(filename, number):
         yield 'README.txt is missing'
 
 def UsageError():
+    platforms = ' | '.join(ENGINE_PLATFORMS)
     sys.exit('Usage: validate_release.py <path to universal zip> [<version number>]\n'
              '       validate_release.py <path to symbols zip> [symbols]\n'
-             '       validate_release.py <path to platform-specific zip> [linux-amd64 | macos-amd64 | windows-i686 | windows-amd64]')
+            f'       validate_release.py <path to platform-specific zip> [{platforms}]')
 
 def GuessArg2(filename):
     """Try to guess the desired action from the zip file name."""
