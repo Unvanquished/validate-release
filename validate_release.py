@@ -85,9 +85,9 @@ def GetElfBuildId(elf):
                 bytes = (3,2,1,0, 5,4, 7,6, 8,9,10,11,12,13,14,15)
                 return ''.join(note['n_desc'][2*i: 2*i + 2] for i in bytes).upper() + '0'
 
-def StoreBuildId(id, os, triple, symids):
+def StoreBuildId(id, triple, symids):
     if id is None:
-        yield f'Missing build ID for {os} binary {triple[2]}'
+        yield f'Missing build ID for {triple[0]} {triple[1]} binary {triple[2]}'
     elif triple in symids:
         yield f'Multiple binaries for {triple}'
     else:
@@ -95,7 +95,7 @@ def StoreBuildId(id, os, triple, symids):
 
 def LinuxCheckBinary(z, arch, binary, symids):
     elf = ELFFile(z.open(binary))
-    yield from StoreBuildId(GetElfBuildId(elf), 'Linux', ('Linux', arch, binary), symids)
+    yield from StoreBuildId(GetElfBuildId(elf), ('Linux', arch, binary), symids)
 
     # Check ASLR
     if elf.header.e_type != 'ET_DYN':
@@ -153,7 +153,7 @@ def WindowsCheckBinary(z, arch, binary, symids):
     else:
         id = '%08X%04X%04X%s%X' % (entry.Signature_Data1, entry.Signature_Data2, entry.Signature_Data3,
                                    '%02X' * 8 % tuple(entry.Signature_Data4), entry.Age)
-    yield from StoreBuildId(id, f'{bitness}-bit Windows', ('windows', arch, binary), symids)
+    yield from StoreBuildId(id, ('windows', arch, binary), symids)
 
 def MacCheckBinary(z, arch, binary):
     with TempUnzip(z, 'Unvanquished.app/Contents/MacOS/' + binary) as path:
@@ -381,7 +381,7 @@ def AnalyzeDpk(dpk, unv, symids, deps):
             yield f'Unexpected nexe "{filename}" in {dpk.filename}'
         elif unv == 1:
             id = GetElfBuildId(ELFFile(dpk.open(filename)))
-            yield from StoreBuildId(id, 'NaCl', ('NaCl', match.group(2), match.group(1)), symids)
+            yield from StoreBuildId(id, ('NaCl', match.group(2), match.group(1)), symids)
 
 # See VersionCmp in daemon/src/common/FileSystem.cpp
 def VersionCompareKey(version):
