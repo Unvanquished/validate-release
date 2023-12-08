@@ -151,8 +151,14 @@ def WindowsCheckBinary(z, arch, binary, symids):
     except AttributeError:
         id = None
     else:
-        id = '%08X%04X%04X%s%X' % (entry.Signature_Data1, entry.Signature_Data2, entry.Signature_Data3,
-                                   '%02X' * 8 % tuple(entry.Signature_Data4), entry.Age)
+        if isinstance(entry.Signature_Data4, bytes): # before pefile v2023.2.7
+            id = '%08X%04X%04X%s%X' % (entry.Signature_Data1, entry.Signature_Data2, entry.Signature_Data3,
+                                       '%02X' * 8 % tuple(entry.Signature_Data4), entry.Age)
+        else:
+            id = '%08X%04X%04X%02X%02X%s%X' % (
+                entry.Signature_Data1, entry.Signature_Data2, entry.Signature_Data3,
+                entry.Signature_Data4, entry.Signature_Data5,
+                '%02X' * 6 % tuple(entry.Signature_Data6), entry.Age)
     yield from StoreBuildId(id, ('windows', arch, binary), symids)
 
 def MacCheckBinary(z, arch, binary):
