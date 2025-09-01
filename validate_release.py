@@ -48,15 +48,13 @@ def CheckUnixPermissions(z):
 def LinuxCheckSymbolVersions(elf, binary, arch):
     # Target supported versions are from Debian 11 Bullseye
     lib_versions = {
-        'amd64': (('GLIBC', '2.31'), ('GLIBCXX', '3.4.28')),
-        'i686':  (('GLIBC', '2.31'), ('GLIBCXX', '3.4.28')),
-        'arm64': (('GLIBC', '2.31'), ('GLIBCXX', '3.4.28')),
-        'armhf': None, # Not yet implemented for 32-bit ARM
+        ('GLIBC', '2.31'),
+        ('GLIBCXX', '3.4.28')
     }
-    if arch not in lib_versions:
-        yield f'Unknown Linux architecture {arch}'
+    if arch in { 'armhf' }:
         return
-    if not lib_versions[arch]:
+    if arch not in { 'amd64', 'i686', 'arm64' }:
+        yield f'Unknown Linux architecture {arch}'
         return
     v = lambda version: tuple(int(n) for n in version.split('.'))
     maxes = collections.defaultdict(lambda: '0')
@@ -68,7 +66,7 @@ def LinuxCheckSymbolVersions(elf, binary, arch):
                 lib, _, version = aux.name.partition('_')
                 if v(version) > v(maxes[lib]):
                     maxes[lib] = version
-    for lib, version in lib_versions[arch]:
+    for lib, version in lib_versions:
         if maxes[lib] == '0':
             yield f"Can't detect symbol versions for {lib} on Linux binary {binary} ({arch})"
         elif v(maxes[lib]) > v(version):
