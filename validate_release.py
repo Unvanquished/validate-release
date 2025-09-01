@@ -46,11 +46,11 @@ def CheckUnixPermissions(z):
             yield f"File '{info.filename}' in {z.filename} has odd permissions {oct(permissions)}"
 
 def LinuxCheckSymbolVersions(elf, binary, arch):
-    # Target supported versions are from Debian 10 Buster
+    # Target supported versions are from Debian 11 Bullseye
     lib_versions = {
-        'amd64': (('GLIBC', '2.27'), ('GLIBCXX', '3.4.25')),
-        'i686':  (('GLIBC', '2.28'), ('GLIBCXX', '3.4.25')),
-        'arm64': (('GLIBC', '2.27'), ('GLIBCXX', '3.4.25')),
+        'amd64': (('GLIBC', '2.31'), ('GLIBCXX', '3.4.28')),
+        'i686':  (('GLIBC', '2.31'), ('GLIBCXX', '3.4.28')),
+        'arm64': (('GLIBC', '2.31'), ('GLIBCXX', '3.4.28')),
         'armhf': None, # Not yet implemented for 32-bit ARM
     }
     if arch not in lib_versions:
