@@ -112,14 +112,16 @@ def LinuxCheckBinary(z, arch, binary, symids):
         'libc.so.6',
         'libdl.so.2',
         'libgcc_s.so.1',
-        'libgomp.so.1',
         'libm.so.6',
         'libpthread.so.0',
         'librt.so.1',
         'libstdc++.so.6',
     }
     if binary == 'daemon':
-        expected.add('libGL.so.1')
+        expected.update({
+            'libGL.so.1',
+            'libgomp.so.1',
+        })
     added = deps - expected
     removed = expected - deps
     if added or removed:
