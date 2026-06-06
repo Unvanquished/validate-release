@@ -340,6 +340,45 @@ def IsValidVfsPath(path):
                     return False
     return True
 
+DPK_ALLOWED_EXTENSIONS = {
+    '.arena',
+    '.ase',
+    '.bsp',
+    '.bt',
+    '.cfg',
+    '.crn',
+    '.iqm',
+    '.jpg',
+    '.lua',
+    '.map',
+    '.md',
+    '.md3',
+    '.md5anim',
+    '.md5mesh',
+    '.minimap',
+    '.navcfg',
+    '.navcon',
+    '.nexe',
+    '.obj',
+    '.ogg',
+    '.opus',
+    '.particle',
+    '.po',
+    '.rcss',
+    '.rml',
+    '.skin',
+    '.shader',
+    '.tga',
+    '.trail',
+    '.ttf',
+    '.txt',
+    '.voice',
+    '.wav',
+    '.webp',
+    'DELETED',
+    'DEPS',
+}
+
 # See ParseDeps in daemon/src/common/FileSystem.cpp
 def ParseDeps(dpk, out):
     try:
@@ -365,12 +404,12 @@ def AnalyzeDpk(dpk, unv, symids, deps):
     for filename in dpk.namelist():
         if filename.endswith('/'):
             continue
-        name, _, ext = filename.rpartition('.')
-        if ext == '7z':
-            yield f'Unwanted file "{filename}" found in {dpk.filename}'
-            continue
         if not IsValidVfsPath(filename):
             yield f'{repr(filename)} in {dpk.filename} has a name invalid for the VFS'
+            continue
+        name, dot, ext = filename.rpartition('.')
+        if dot + ext not in DPK_ALLOWED_EXTENSIONS:
+            yield f'{repr(filename)} in {dpk.filename} has an unrecognized extension'
             continue
         if ext != 'nexe' or not ELFFile:
             continue
