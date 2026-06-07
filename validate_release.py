@@ -398,7 +398,6 @@ def ParseDeps(dpk, out):
                 out.append((fields[0], fields[1]))
 
 def AnalyzeDpk(dpk, unv, symids, deps):
-    dpk = zipfile.ZipFile(dpk)
     yield from ParseDeps(dpk, deps)
     for filename in dpk.namelist():
         if filename.endswith('/'):
@@ -418,6 +417,29 @@ def AnalyzeDpk(dpk, unv, symids, deps):
         elif unv == 1:
             id = GetElfBuildId(ELFFile(dpk.open(filename)))
             yield from StoreBuildId(id, ('NaCl', match.group(2), match.group(1)), symids)
+
+def CheckMap(name, dpk):
+    filenames = set(dpk.namelist())
+    required = {
+        f'maps/{name}.bsp',
+        f'maps/{name}.map',
+        f'minimaps/{name}.crn',
+        f'minimaps/{name}.minimap',
+        f'meta/{name}/{name}.arena',
+        f'meta/{name}/{name}.crn',
+        f'maps/{name}/lm_0000.webp',
+        f'maps/{name}/lm_0001.webp',
+    }
+    for missing in required - filenames:
+        yield f'{dpk.filename} does not have {missing}'
+    lmcount = sum(f.startswith(f'maps/{name}/lm_') for f in filenames)
+    if lmcount & 1:
+        yield f'{dpk.filename} has odd number of lightmaps (no deluxe?)'
+    for i in range(lmcount):
+        lmname = 'maps/%s/lm_%04d.webp' % (name, i)
+        if lmname not in filenames:
+            yield f'Found {lmcount} lightmaps in {dpk.filename} but there is no {lmname}'
+            break
 
 # See VersionCmp in daemon/src/common/FileSystem.cpp
 def VersionCompareKey(version):
@@ -490,7 +512,10 @@ def CheckPkg(z, base, number, symids):
                 unv = 1
             else:
                 unv = 2
-            yield from AnalyzeDpk(z.open(fullname), unv, symids, deps)
+            dpk = zipfile.ZipFile(z.open(fullname))
+            yield from AnalyzeDpk(dpk, unv, symids, deps)
+            if m.group(1).startswith('map-'):
+                yield from CheckMap(m.group(1)[4:], dpk)
             depmap[m.group(1), m.group(2)] = deps
         elif name != 'md5sums':
             yield 'Unexpected filename in pkg/ ' + repr(name)
