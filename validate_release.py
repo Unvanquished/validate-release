@@ -131,7 +131,7 @@ def LinuxCheckBinary(z, arch, binary, symids):
     # Check libc and libstdc++ symbol versions
     yield from LinuxCheckSymbolVersions(elf, binary, arch)
 
-def WindowsCheckBinary(z, arch, binary, symids):
+def WindowsCheckBinary(z, arch, binary, symids, dlls):
     # Partially based on https://gist.github.com/wdormann/dcdba9840701c879115f9aa5c1ef86dc
     with z.open(binary) as f:
         bin = f.read()
@@ -145,6 +145,7 @@ def WindowsCheckBinary(z, arch, binary, symids):
         yield f"Windows {arch} binary '{binary}' has broken ASLR due to stripped relocs"
     elif bitness == 64 and not pe.OPTIONAL_HEADER.IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA:
         yield f"Windows {arch} binary '{binary}' lacks High-Entropy VA flag"
+    dlls.update(imp.dll.decode("ascii").lower() for imp in pe.DIRECTORY_ENTRY_IMPORT)
 
     # Get build ID
     try:
@@ -212,8 +213,13 @@ def CheckWindows(z, arch, symids):
     if not pefile:
         yield 'Missing pip package: pefile. Unable to analyze Windows binaries without it.'
         return
+    dlls = set()
     for binary in ENGINE_BINARIES:
-        yield from WindowsCheckBinary(z, arch, f'{binary}.exe', symids)
+        yield from WindowsCheckBinary(z, arch, f'{binary}.exe', symids, dlls)
+    for name in z.namelist():
+        name = os.path.basename(name).lower()
+        if name.endswith('.dll') and name not in dlls:
+            yield f'{z.filename} has unused DLL {name}'
     if arch == 'i686':
         for exe in {'nacl_loader.exe', 'nacl_loader-amd64.exe'} - set(z.namelist()):
             yield f'{z.filename} missing {exe}'
