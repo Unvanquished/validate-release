@@ -186,6 +186,7 @@ ENGINE_PLATFORMS = [
     'linux-arm64',
     'linux-armhf',
     'macos-amd64',
+    'macos-arm64',
     'windows-amd64',
     'windows-i686',
 ]
