@@ -46,10 +46,10 @@ def CheckUnixPermissions(z):
             yield f"File '{info.filename}' in {z.filename} has odd permissions {oct(permissions)}"
 
 def LinuxCheckSymbolVersions(elf, binary, arch):
-    # Target supported versions are from Debian 11 Bullseye
+    # Target supported versions are from Debian 12 Bookworm
     lib_versions = {
-        ('GLIBC', '2.31'),
-        ('GLIBCXX', '3.4.28')
+        ('GLIBC', '2.36'),
+        ('GLIBCXX', '3.4.29')
     }
     if arch in { 'armhf' }:
         return
@@ -110,11 +110,8 @@ def LinuxCheckBinary(z, arch, binary, symids):
                 deps.add(tag.needed)
     expected = {
         'libc.so.6',
-        'libdl.so.2',
         'libgcc_s.so.1',
         'libm.so.6',
-        'libpthread.so.0',
-        'librt.so.1',
         'libstdc++.so.6',
     }
     if binary == 'daemon':
